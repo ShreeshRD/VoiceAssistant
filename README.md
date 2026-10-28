@@ -1,164 +1,158 @@
-![Dictate Unlimited: Your voice. Your Mac.](docs/images/hero.png)
+# Dictate Unlimited for Linux (CPU-only)
 
-# Dictate Unlimited
+Free, local voice dictation on Linux. PipeWire capture, Bark 3.0 recognition
+through whisper.cpp's `parakeet-cli`, a small background daemon, and Wayland
+text insertion. No account, subscription, cloud inference, telemetry, or
+Enter-key injection. Bark 3.0 runs on the CPU with every GPU backend disabled;
+the model is English-only.
 
-**Free, local voice dictation for your Mac. Built by DOO MADE.**
+Tested on Arch Linux with Hyprland 0.56.2 (Wayland), PipeWire, and Python 3.14.
+Python 3.11 or newer is required.
 
-Speak into the app you're already using. Choose a Bark or Whisper model, hold or tap
-a shortcut, and turn speech into text on your Mac. No account, subscription, cloud
-inference, or telemetry.
-
-**V1.1 source preview · Apple Silicon · macOS 15+ · English and multilingual dictation**
-
-This release is for people comfortable building from source. A signed, notarized
-app download is not available yet. There is no usage quota; each recording has a
-five-minute limit. Recognition quality and insertion support vary by model and app.
-
-[Get started](#build-from-source) · [Usage](docs/USAGE.md) · [Report a bug](https://github.com/DanielJD1216/dictate-unlimited/issues/new/choose) · [Contribute](CONTRIBUTING.md)
-
-## What it does
-
-- **Five on-device models.** Bark 3.0, Bark 3.0 Plus, Bark 3.0 Pro, Whisper small, and Whisper Turbo. Download explicitly, then transcribe offline. Your selected installed model loads on launch.
-- **Hold or tap to dictate.** Configurable dictation and recovery shortcuts, with notch or floating feedback.
-- **Microphone readiness.** Choose an input and run a five-second signal check before recording.
-- **Text delivery.** Clipboard paste into supported focused fields, with Accessibility checks and delivery feedback. Never sends Enter.
-- **Paste-last recovery.** Insert the last completed result into your current field without recording again.
-- **Local dictionary.** Explicit word and phrase corrections, with edit, remove, and undo. No automatic learning.
-- **Cancel and recover.** Discard recordings or suppress unfinished recognition. No recording or transcript history is saved.
-
-## The app
-
-Real screenshots from the local preview build. The banner above is illustrative artwork.
-
-![Model selection showing three Bark models, Whisper small and Turbo, and a local import](docs/images/models.jpg)
-
-<details>
-<summary>Recording feedback settings</summary>
-
-![Appearance settings for notch or floating feedback](docs/images/appearance.jpg)
-
-</details>
-
-## Build from source
-
-You need an **Apple Silicon Mac**, **macOS 15 or newer**, and a **Swift 6.2 toolchain**.
-Check `swift --version` first. Git and `curl` are used to acquire pinned dependencies.
-Python 3.11+ and ripgrep (`rg`) are needed for developer checks; the app itself does
-not use a Python runtime.
+## Install
 
 ```sh
-git clone https://github.com/DanielJD1216/dictate-unlimited.git
-cd dictate-unlimited
-./scripts/build-app.sh
-open 'dist/Dictate Unlimited.app'
-```
+git clone https://github.com/ShreeshRD/VoiceAssistant.git
+cd VoiceAssistant
 
-The first build downloads dependencies. Open **Models**, download a model, then
-choose **Load**. First-time Core ML preparation can take several minutes.
+python3 -m venv .venv                 # conversion-only dependencies
+source .venv/bin/activate
+pip install numpy constriction
 
-In **Dictation**, grant Microphone and Accessibility access. Click into your writing
-app before using the shortcut. Keep the built app at one stable path when granting
-permissions. This development build is ad-hoc signed: after rebuilding, macOS may
-need you to remove and re-add its Accessibility entry. See [permission recovery](docs/USAGE.md#accessibility-after-a-rebuild).
-
-| Action | Default shortcut |
-| --- | --- |
-| Start / finish dictation | Control + Option + Space |
-| Paste last completed result | Control + Command + V, on release |
-
-Choose tap or hold mode in Settings. In hold mode, wait for Listening, speak, then
-release. Settings can change either shortcut. See [the usage guide](docs/USAGE.md)
-for cancellation, dictionary rules, clipboard behavior, and microphone selection.
-
-## Linux port (CPU-only)
-
-A separate native port for Linux lives in [`linux/`](linux/README.md). It is an
-independent Python implementation for PipeWire and Wayland, not a build of the
-Swift app, and it leaves the macOS application untouched. It runs the same
-English-only Bark 3.0 model through whisper.cpp's CPU `parakeet-cli`, with
-Hyprland shortcuts and `wtype`/`wl-clipboard` for text delivery, and no account,
-cloud inference, telemetry, or Enter-key injection.
-
-```sh
-./scripts/build-asr-linux.sh         # CPU-only parakeet-cli
-./linux/install.sh                   # symlink ~/.local/bin/dictate
+./scripts/build-asr-linux.sh          # CPU-only parakeet-cli (whisper.cpp v1.9.5)
+./linux/install.sh                    # symlink ~/.local/bin/dictate
 ./linux/dictate models download bark-3.0 --use
-./linux/dictate setup --hyprland     # or --hold; see linux/README.md
+deactivate
 ./linux/dictate doctor
 ```
 
-Bark 3.0 is downloaded as pinned source files and converted to GGML locally.
-The conversion needs NumPy and constriction in a venv or pyenv (Arch's system
-Python is externally managed); the daemon itself uses only the Python standard
-library. See [`linux/README.md`](linux/README.md) for the exact steps.
+Arch marks its Python as externally managed (PEP 668), so the conversion-only
+packages must go in a virtual environment (or an existing pyenv environment).
+NumPy and constriction are only used while converting the downloaded Bark
+weights; the daemon and CLI use only the Python standard library at runtime.
 
-Requirements, commands, the model conversion, configuration, CPU-only
-guarantees, privacy, and current test coverage are documented in
-[`linux/README.md`](linux/README.md) and [`linux/TESTING.md`](linux/TESTING.md).
+`install.sh` also accepts `--build-asr`, `--download-model ID`, `--hyprland`,
+`--hold`, `--yes`, and `--force`. It creates the default config on first run.
 
-## Pick a model
+## Hyprland shortcuts
 
-| Model | Approximate download | Runtime artifact |
-| --- | ---: | --- |
-| Bark 3.0 | 202 MB | Core ML quantized encoder |
-| Bark 3.0 Plus | 206 MB | Core ML mixed-precision encoder |
-| Bark 3.0 Pro | 1.23 GB | Core ML FP16 export |
-| Whisper small | 489 MB | Multilingual Core ML |
-| Whisper Turbo | 630 MB | Compressed large-v3-turbo Core ML |
+```sh
+dictate setup --hyprland          # tap mode: SUPER + D
+dictate setup --hyprland --hold   # press SUPER + D to start, release to finish
+```
 
-These are Core ML exports, so download sizes differ from the original MLX/BF16
-models. Bark models are English-only. Whisper supports multilingual transcription. Runtime or benchmark equivalence to the
-original model paths is not claimed. Weights are downloaded separately under
-CC BY 4.0 (Bark) or MIT (Whisper), never included in this repository. Exact revisions, sizes and hashes
-are pinned in [the Bark catalog](Sources/DictateCore/Resources/models.json) and
-[Whisper catalog](Sources/DictateCore/Resources/whisper-models.json).
+The command writes a marked block into `~/.config/hypr/hyprland.conf`, keeps a
+timestamped backup, and asks before writing when run interactively. Then reload
+Hyprland:
 
-Whisper adds Auto-detect or a chosen language, including Korean and English.
-Transcription preserves the spoken language; translation is disabled. Compatible
-local model imports are described in [Whisper and local imports](docs/WHISPER.md).
+```sh
+hyprctl reload
+```
 
-## Privacy and boundaries
+Defaults (`linux/hyprland.conf.example`):
 
-Recognition runs locally after installation. Network requests are used for explicit
-model downloads from Hugging Face and its CDN; audio and transcripts are not part
-of those requests. There is no account, telemetry, cloud inference, or update service.
+| Action | Tap mode | Hold mode |
+| --- | --- | --- |
+| Start / finish | `SUPER + D` | `SUPER + D` press / release |
+| Paste last result | `SUPER + SHIFT + V` | `SUPER + SHIFT + V` |
+| Cancel | `SUPER + Escape` | `SUPER + Escape` |
 
-Audio and session text stay in memory until discarded, cleared, or the app exits.
-Dictionary entries and preferences persist locally. Automatic insertion uses the
-clipboard: verified delivery restores the previous contents only if unchanged;
-unverified delivery leaves the dictated text there. Clipboard managers may retain
-it. Secure or unreadable fields and changed targets are not blindly retried.
+## Commands
 
-This is a dictation utility. Meetings, voice memos, cloud cleanup and agent integrations
-are outside V1. See [known limits and tested coverage](docs/TESTING.md).
+```sh
+dictate toggle                  # start, or stop and transcribe
+dictate start                   # used by hold-mode key press
+dictate stop                    # used by hold-mode key release
+dictate cancel                  # discard recording or in-flight transcription
+dictate paste-last              # re-insert the last completed transcript
+dictate status                  # state, model, CPU use, level
+dictate daemon --detach         # background daemon
+dictate daemon --foreground     # foreground daemon (systemd)
+dictate reload                  # reload config and dictionary
+dictate quit                    # stop the daemon
+```
+
+Audio, models, and dictionary:
+
+```sh
+dictate mic list
+dictate mic test --seconds 5
+dictate mic use <source-name>
+
+dictate models list
+dictate models download bark-3.0 --use
+dictate models verify
+dictate models import ~/Downloads/custom-ggml.bin
+dictate models remove bark-3.0
+
+dictate dictionary list
+dictate dictionary add "heard phrase" "replacement"
+dictate dictionary remove <id>
+```
+
+Configuration and diagnostics:
+
+```sh
+dictate config show
+dictate config set threads 6
+dictate doctor                  # 21 environment checks
+dictate transcribe sample.wav   # offline file transcription
+```
+
+## Model
+
+There is one catalog entry, `bark-3.0`, from
+`https://huggingface.co/ConwayResearch/Underdog-Bark-3.0` at revision
+`85db2ad18ab41e534a222ee253c29191d77ed919`. It is English-only.
+
+Bark 3.0 is published as `model.bark` plus a NumPy loader, not as GGML.
+`dictate models download bark-3.0` downloads the five pinned source files
+(about 167 MB total), checking each file's exact size and SHA-256, then runs
+`scripts/convert-bark-to-ggml.py` locally to write a `bark-3.0-ggml-f16.bin`
+(about 1.2 GB). Sources are kept under
+`$XDG_DATA_HOME/dictate-unlimited/models/sources/bark-3.0/`.
+
+## Configuration
+
+The config is JSON at `$XDG_CONFIG_HOME/dictate-unlimited/config.json`
+(normally `~/.config/dictate-unlimited/config.json`). `dictate config set`
+validates and writes it atomically with mode `0600`; `dictate reload` applies
+changes to a running daemon.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `model` | `bark-3.0` | catalog id or imported `.bin` file name |
+| `threads` | `4` | Bark CPU threads (1–64) |
+| `max_seconds` | `300` | recording limit in seconds (5–600) |
+| `silence_rms` | `0.0015` | below this RMS the result is treated as silence |
+| `asr_bin` | `""` | explicit `parakeet-cli` path; empty means auto-detect |
+| `models_dir` | `""` | override model directory |
+| `audio_source` | `""` | PipeWire source name; empty means system default |
+| `insertion` | `auto` | `auto`, `wtype`, `clipboard`, `copy`, `none` |
+| `notifications` | `true` | desktop notifications |
+| `auto_start_daemon` | `true` | start the daemon from a hotkey if needed |
+
+## CPU-only guarantee
+
+The port refuses to run a `parakeet-cli` that does not advertise `-ng`. The
+build script compiles with all GPU backends disabled and checks the binary and
+its linked libraries before finishing.
+
+## Privacy and data
+
+Recognition and correction run locally. The only network access is an explicit
+`dictate models download` from Hugging Face. No audio or transcript leaves the
+machine, and the conversion runs on your CPU.
+
+Audio is written to a private temporary WAV, transcribed, and deleted unless
+`keep_audio` is true. There is no transcript history.
 
 ## Development
 
 ```sh
-./scripts/check-local.sh
-./scripts/check-audio-startup.sh
-./scripts/check-session.sh
-./scripts/check-model-store.sh
-./scripts/check-correction-store.sh
-./scripts/check-clipboard.sh
-# With full Xcode selected:
-swift test
+PYTHONPATH=linux python3 -m unittest discover -s linux/tests
+./linux/dictate doctor
 ```
 
-Checks are documented in [TESTING.md](docs/TESTING.md). Hosted CI and a broad hardware
-matrix are not established for this preview. The app has been tested locally,
-including physical hold mode, dictionary corrections, recovery, and text delivery.
-That does not establish compatibility with every app, microphone, or keyboard layout.
-
-[Contributing](CONTRIBUTING.md) · [Release status](docs/PREVIEW-RELEASE.md) · [Changelog](CHANGELOG.md) · [Signing](docs/SIGNING-NOTARIZATION.md)
-
-## Licence and credits
-
-Original application code is [MIT licensed](LICENSE). Adapted Bark runtime algorithms
-and separately downloaded weights are **CC BY 4.0**; FluidAudio is **Apache-2.0** and
-ZIPFoundation is **MIT**. The repository is not exclusively MIT.
-
-See [third-party notices](THIRD_PARTY_NOTICES.md) and [licence scope](docs/LICENSING.md)
-for attribution and upstream sources. No Resonant code, assets or bundled resources
-are included. [Image provenance](docs/images/README.md) identifies the generated
-banner and authentic screenshots.
+See [`linux/README.md`](linux/README.md) for the full port documentation,
+including insertion modes, the systemd user service, and limitations.

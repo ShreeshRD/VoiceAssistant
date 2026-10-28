@@ -1,9 +1,9 @@
 # Dictate Unlimited for Linux (CPU-only)
 
-This directory is a native Linux port of the macOS app: PipeWire capture,
-Bark 3.0 recognition through whisper.cpp's `parakeet-cli`, a small background
-daemon, and Wayland text insertion. It is additive — the Swift/macOS
-application in the repository root is untouched and still builds independently.
+This directory is a native Linux port: PipeWire capture, Bark 3.0 recognition
+through whisper.cpp's `parakeet-cli`, a small background daemon, and Wayland
+text insertion. The repository is Linux-only; the macOS Swift GUI has been
+removed.
 
 The port has no account, cloud inference, telemetry, update service, or Enter-key
 injection. Bark 3.0 runs on the CPU with every GPU backend disabled, and the
