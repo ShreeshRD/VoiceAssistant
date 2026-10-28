@@ -1,0 +1,42 @@
+import Foundation
+import DictateCore
+
+func runCorrectionChecks() {
+    let brand = LocalCorrection(heard: "doo made", replacement: "DOO MADE")
+    let product = LocalCorrection(heard: "react", replacement: "React")
+    precondition(LocalCorrections.apply("doo made uses REACT. Reactive, prereact, react2 and react_widget stay.", entries: [brand, product]) == "DOO MADE uses React. Reactive, prereact, react2 and react_widget stay.")
+    precondition(LocalCorrections.apply("éreact reacté 反react react反 (react)", entries: [product]) == "éreact reacté 反react react反 (React)")
+    // A combining mark must not permit a match inside another Unicode word.
+    precondition(LocalCorrections.apply("e\u{301}react react\u{301} react", entries: [product]) == "e\u{301}react react\u{301} React")
+    let city = LocalCorrection(heard: "new york", replacement: "NY")
+    let fullCity = LocalCorrection(heard: "new york city", replacement: "NYC")
+    precondition(LocalCorrections.apply("New York City and new york", entries: [city, fullCity]) == "NYC and NY")
+    let first = LocalCorrection(heard: "alpha", replacement: "beta")
+    let second = LocalCorrection(heard: "beta", replacement: "gamma")
+    precondition(LocalCorrections.apply("alpha beta", entries: [first, second]) == "beta gamma")
+    let literal = LocalCorrection(heard: "c++", replacement: "$1 \\ literal")
+    precondition(LocalCorrections.apply("Use C++ and c++builder", entries: [literal]) == "Use $1 \\ literal and c++builder")
+    let accent = LocalCorrection(heard: "café", replacement: "Coffee")
+    precondition(LocalCorrections.apply("CAFÉ caféine", entries: [accent]) == "Coffee caféine")
+    precondition(LocalCorrections.apply("CAFE\u{301}", entries: [accent]) == "Coffee")
+    precondition(LocalCorrections.validationError(heard: "cafe\u{301}", replacement: "other", existing: [accent]) != nil)
+    let normalized = LocalCorrection(heard: "  hello world  ", replacement: "  HELLO  ")
+    precondition(normalized.heard == "hello world" && normalized.replacement == "HELLO")
+    precondition(LocalCorrections.validationError(heard: "DOO MADE", replacement: "other", existing: [brand]) != nil)
+    precondition(LocalCorrections.validationError(heard: "doo made", replacement: "new", existing: [brand], excludingID: brand.id) == nil)
+    precondition(LocalCorrections.validationError(heard: "", replacement: "x", existing: []) != nil)
+    precondition(LocalCorrections.validationError(heard: "a", replacement: "  ", existing: []) != nil)
+    precondition(LocalCorrections.validationError(heard: "a\nb", replacement: "x", existing: []) != nil)
+    precondition(LocalCorrections.validationError(heard: "a", replacement: "x\u{2028}y", existing: []) != nil)
+    precondition(LocalCorrections.validationError(heard: String(repeating: "a", count: 120), replacement: "x", existing: []) == nil)
+    precondition(LocalCorrections.validationError(heard: String(repeating: "a", count: 121), replacement: "x", existing: []) != nil)
+    precondition(LocalCorrections.validationError(heard: "a", replacement: String(repeating: "x", count: 121), existing: []) != nil)
+    // Invalid decoded entries cannot remove text or create duplicate replacement keys.
+    let duplicate = LocalCorrection(heard: "REACT", replacement: "WRONG")
+    let invalid = LocalCorrection(heard: "other", replacement: "")
+    precondition(LocalCorrections.apply("react other", entries: [product, duplicate, invalid]) == "React other")
+    let decoded = try! JSONDecoder().decode(LocalCorrection.self, from: JSONEncoder().encode(brand))
+    precondition(decoded == brand && decoded.id == brand.id)
+    precondition(LocalCorrections.apply("unchanged", entries: []) == "unchanged")
+    print("PASS local corrections: Unicode word boundaries, longest phrases, literal replacement, no cascades, validation and Codable identity")
+}

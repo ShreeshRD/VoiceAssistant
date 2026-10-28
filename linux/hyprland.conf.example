@@ -1,0 +1,30 @@
+# Dictate Unlimited (Linux CPU-only port)
+#
+# Add this block to ~/.config/hypr/hyprland.conf, or run:
+#   dictate setup --hyprland            # tap mode
+#   dictate setup --hyprland --hold     # hold mode
+#
+# The daemon is CPU-only: the whisper.cpp parakeet runtime is built without
+# CUDA/Vulkan and is launched with -ng and empty CUDA/HIP/ROCR device variables.
+
+# Start the background daemon once per Hyprland session.
+exec-once = dictate daemon --detach
+
+# --- Tap mode (default): press once to start, press again to finish ---
+bind = SUPER, D, exec, dictate toggle
+
+# --- Hold mode: uncomment these and comment out the toggle line above ---
+# bind = SUPER, D, exec, dictate start
+# bindr = SUPER, D, exec, dictate stop
+
+# Paste the last completed dictation again.
+bind = SUPER SHIFT, V, exec, dictate paste-last
+
+# Discard a recording or cancel an in-flight transcription.
+bind = SUPER, Escape, exec, dictate cancel
+
+# The daemon itself can also be controlled from a terminal:
+#   dictate status
+#   dictate status --watch
+#   dictate cancel
+#   dictate quit

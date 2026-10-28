@@ -1,0 +1,20 @@
+[Unit]
+Description=Dictate Unlimited (CPU-only Linux port)
+Documentation=https://github.com/DanielJD1216/dictate-unlimited/blob/main/linux/README.md
+After=graphical-session.target pipewire.service wireplumber.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/dictate daemon --foreground
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+Environment=CUDA_VISIBLE_DEVICES=
+Environment=HIP_VISIBLE_DEVICES=
+Environment=ROCR_VISIBLE_DEVICES=
+Environment=GGML_CUDA=0
+PassEnvironment=WAYLAND_DISPLAY XDG_RUNTIME_DIR HYPRLAND_INSTANCE_SIGNATURE
+
+[Install]
+WantedBy=graphical-session.target

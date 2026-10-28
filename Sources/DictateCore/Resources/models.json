@@ -1,0 +1,157 @@
+[
+  {
+    "id": "bark",
+    "name": "Bark 3.0",
+    "repository": "ConwayResearch/Underdog-Bark-3.0",
+    "revision": "85db2ad18ab41e534a222ee253c29191d77ed919",
+    "prefix": "coreml/ane/",
+    "precision": "Core ML quantized encoder",
+    "files": [
+      {
+        "path": "BarkEncoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+        "size": 1784701,
+        "sha256": "7c3f1c1612ba21bcc4d8efff1b32154b39cb3e1e2f10020117793acc5c96fcdf"
+      },
+      {
+        "path": "BarkEncoder.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+        "size": 189133632,
+        "sha256": "98979e5dd731486ddfb2c312f80a3038205c058aac9fe0f403ba26e1a158d385"
+      },
+      {
+        "path": "BarkEncoder.mlpackage/Manifest.json",
+        "size": 617,
+        "sha256": null
+      },
+      {
+        "path": "decoder.npz",
+        "size": 11168286,
+        "sha256": "1ce79071f54c3dcec9aa9bb1d488486766f1fdbb3fd988b776da3f4da8024665"
+      },
+      {
+        "path": "vocab.json",
+        "size": 115878,
+        "sha256": null
+      }
+    ]
+  },
+  {
+    "id": "bark-plus",
+    "name": "Bark 3.0 Plus",
+    "repository": "ConwayResearch/Underdog-Bark-3.0-Plus",
+    "revision": "d4fab2f8b95681e5ad3cfb4e8c5f4e0c009b3deb",
+    "prefix": "coreml/ane/",
+    "precision": "Core ML mixed-precision encoder",
+    "files": [
+      {
+        "path": "BarkEncoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+        "size": 1784701,
+        "sha256": "bfc5b4e6fde8cd06722ae37bee6bea044f9c4e3bbb25c9945a48edc3e5df0ec1"
+      },
+      {
+        "path": "BarkEncoder.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+        "size": 192940480,
+        "sha256": "6b2c1c9ca7fdd8d18abee2452b54a978dcb1c31d0460bded396d9e61e3e9a59f"
+      },
+      {
+        "path": "BarkEncoder.mlpackage/Manifest.json",
+        "size": 617,
+        "sha256": null
+      },
+      {
+        "path": "decoder.npz",
+        "size": 11168286,
+        "sha256": "1ce79071f54c3dcec9aa9bb1d488486766f1fdbb3fd988b776da3f4da8024665"
+      },
+      {
+        "path": "vocab.json",
+        "size": 115878,
+        "sha256": null
+      }
+    ]
+  },
+  {
+    "id": "bark-pro",
+    "name": "Bark 3.0 Pro",
+    "repository": "ConwayResearch/Underdog-Bark-3.0-Pro",
+    "revision": "4b5c51e04aa8d16dda9ecdff71bc29f7360149e4",
+    "prefix": "coreml/",
+    "precision": "Core ML FP16 export (BF16 original)",
+    "files": [
+      {
+        "path": "Decoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+        "size": 11612,
+        "sha256": "00cd3bdf438e859eff16d1376cab86f6214d0e44b1876316e30550e35d012763"
+      },
+      {
+        "path": "Decoder.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+        "size": 23604992,
+        "sha256": "b6bfa9053e8e20d1e80a7522ddba5c66e2c8c77cfc956d4ebccf749baf4d3d69"
+      },
+      {
+        "path": "Decoder.mlpackage/Manifest.json",
+        "size": 617,
+        "sha256": null
+      },
+      {
+        "path": "Encoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+        "size": 1206573,
+        "sha256": "d82718558f523dc13f9c0ede57d6f8e37d953950808a5aaa3a4633a7f752dd77"
+      },
+      {
+        "path": "Encoder.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+        "size": 1195742464,
+        "sha256": "619757bd47bc5cc131a85e54e94ffacc1b8c1bce737c1f1f6569eda8621a30d6"
+      },
+      {
+        "path": "Encoder.mlpackage/Manifest.json",
+        "size": 617,
+        "sha256": null
+      },
+      {
+        "path": "JointDecisionv3.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+        "size": 8759,
+        "sha256": "1057c2d9e9efce23258dbf2e7747e6facf7a42f4fcbcf2a21cdd160e065b18ac"
+      },
+      {
+        "path": "JointDecisionv3.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+        "size": 12642764,
+        "sha256": "90257de4d4582921c31db6efe9668017274b7c4cfdfe5aac9b9183233f7a9bdd"
+      },
+      {
+        "path": "JointDecisionv3.mlpackage/Manifest.json",
+        "size": 617,
+        "sha256": null
+      },
+      {
+        "path": "LICENSE",
+        "size": 18657,
+        "sha256": null
+      },
+      {
+        "path": "NOTICE",
+        "size": 611,
+        "sha256": null
+      },
+      {
+        "path": "Preprocessor.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+        "size": 18839,
+        "sha256": "dd4a5266ed9048aae620e73aa983eab93256654a343ded1226f9456b79f79a67"
+      },
+      {
+        "path": "Preprocessor.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+        "size": 1184512,
+        "sha256": "7a31e2bd311bfa97ea3fe73d4a6c029824327a71590397bd8784089a88754a77"
+      },
+      {
+        "path": "Preprocessor.mlpackage/Manifest.json",
+        "size": 617,
+        "sha256": null
+      },
+      {
+        "path": "parakeet_v3_vocab.json",
+        "size": 143080,
+        "sha256": null
+      }
+    ]
+  }
+]

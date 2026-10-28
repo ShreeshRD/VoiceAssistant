@@ -1,0 +1,22 @@
+.build/
+.DS_Store
+dist/
+evidence/
+skillset-saves/
+*.wav
+*.mlmodelc/
+.dependencies/
+
+# Linux port Python and local test artifacts.
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+
+# Preserve local source-app investigation without adding it to a public repository.
+MAC-AGENT-PROMPT.txt
+notes/RESONANT-*.md
+notes/REA-MAC-HANDOFF-*.md
+notes/WSL-PATH-OUTCOME*.md
+notes/DICTATE-UNLIMITED-STRUCTURE.md
