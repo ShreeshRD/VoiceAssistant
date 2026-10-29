@@ -3,9 +3,10 @@
 This records what was exercised for the Linux port and how to repeat it. It is
 not a claim of broad hardware or application compatibility.
 
-Last run: 2026-10-27 on Arch Linux, Hyprland 0.56.2 (Wayland), PipeWire,
+Last run: 2026-10-29 on Arch Linux, Hyprland 0.56.2 (Wayland), PipeWire,
 Python 3.14.8 and 3.11.9 (pyenv `voice`), whisper.cpp 1.9.5 `parakeet-cli`
-built CPU-only, Bark 3.0.
+built CPU-only, Bark 3.0. The assistant suite uses local fake LLM/TTS servers;
+a separate manual run exercised Bonsai, MiMo TTS, `mpv`, and notifications.
 
 ## Unit tests
 
@@ -13,12 +14,13 @@ built CPU-only, Bark 3.0.
 PYTHONPATH=linux python3 -m unittest discover -s linux/tests
 ```
 
-63 tests, all passing:
+88 tests, all passing:
 
 | File | Tests | Covers |
 | --- | ---: | --- |
 | `tests/test_asr.py` | 3 | configured binary, stdout transcript, stderr error path |
 | `tests/test_asr_parse.py` | 8 | parakeet transcript cleanup, special tokens, CPU flags |
+| `tests/test_assistant.py` | 25 | sentence splitting, think-tag filtering, LLM/TTS clients, secrets, speech pipeline, full simulated turn |
 | `tests/test_audio.py` | 8 | PCM statistics, WAV stats, capture lifecycle |
 | `tests/test_config.py` | 7 | defaults, validation, typed `config set`, legacy-key migration |
 | `tests/test_corrections.py` | 16 | ordering, matching, add/remove/clear, persistence |

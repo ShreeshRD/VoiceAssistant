@@ -6,8 +6,14 @@ text insertion. The repository is Linux-only; the macOS Swift GUI has been
 removed.
 
 The port has no account, cloud inference, telemetry, update service, or Enter-key
-injection. Bark 3.0 runs on the CPU with every GPU backend disabled, and the
-model is English-only.
+injection for dictation. Bark 3.0 runs on the CPU with every GPU backend disabled,
+and the model is English-only.
+
+An optional voice assistant lives in the same daemon. It reuses the microphone
+and CPU recognizer, streams a reply from an OpenAI-compatible LLM, speaks it
+through an OpenAI-compatible TTS endpoint, and reports progress through Waybar
+and short notifications. Dictation behaves exactly as before when the assistant
+is not used.
 
 Tested on Arch Linux with Hyprland 0.56.2 (Wayland), PipeWire, and Python 3.14.
 Python 3.11 or newer is required. Other Wayland compositors should work with the
@@ -24,8 +30,10 @@ same `wtype`/`wl-clipboard` tools, but only Hyprland keybinds are provided.
 | constriction | `pip install constriction` in a venv or pyenv | one-time ANS decoding of `model.bark` |
 | wtype | `wtype` | typing text into the focused window |
 | wl-clipboard | `wl-clipboard` | clipboard and paste fallback |
+| audio player | `mpv`, `pw-cat`, or `ffplay` | assistant speech playback |
 | libnotify | `libnotify` | desktop notifications (optional) |
 | Hyprland | `hyprland` | shortcuts (optional, compositor-specific) |
+| Waybar | `waybar` | assistant state module (optional) |
 
 ```sh
 sudo pacman -S --needed python pipewire-audio wtype wl-clipboard \
@@ -60,8 +68,13 @@ If you already have a pyenv or virtual environment with NumPy and constriction
 (for example, `pyenv shell voice`), activate that instead of creating `.venv`.
 
 `install.sh` also accepts `--build-asr`, `--download-model ID`, `--hyprland`,
-`--hold`, `--yes`, and `--force`. It creates the default config on first run and
-never edits your compositor configuration unless you pass `--hyprland`.
+`--hold`, `--assistant`, `--yes`, and `--force`. It creates the default config on
+first run, installs `dictate` and the Waybar helper
+`dictate-assistant-waybar` into `~/.local/bin`, and never edits your compositor
+configuration unless you pass `--hyprland`. `--assistant` only adds the
+`SUPER + A` bind and must be combined with `--hyprland`. If `SUPER + A` is
+already used in your Hyprland config, comment that bind out first; Hyprland
+keeps the first matching bind, so the assistant would otherwise never fire.
 
 The build script clones whisper.cpp at tag `v1.9.5`, configures CMake with
 `GGML_CUDA`, `GGML_VULKAN`, `GGML_METAL`, `GGML_HIP`, and `GGML_SYCL` all off,
@@ -76,6 +89,7 @@ Add the generated block automatically:
 ```sh
 dictate setup --hyprland          # tap mode
 dictate setup --hyprland --hold   # press to start, release to finish
+dictate setup --hyprland --assistant  # also bind SUPER + A
 ```
 
 The command writes a marked block between `# >>> dictate-unlimited >>>` and
@@ -93,6 +107,10 @@ Defaults, also available in [`hyprland.conf.example`](hyprland.conf.example):
 | Start / finish | `SUPER + D` | `SUPER + D` press / release |
 | Paste last result | `SUPER + SHIFT + V` | `SUPER + SHIFT + V` |
 | Cancel | `SUPER + Escape` | `SUPER + Escape` |
+| Assistant tap | `SUPER + A` | `SUPER + A` |
+
+The assistant row is only written with `--assistant`. The same key finishes a
+recording and interrupts a reply, so a separate cancel bind is not needed.
 
 The block includes `exec-once = dictate daemon --detach` so the daemon starts
 once per Hyprland session. `dictate` commands auto-start the daemon when a
@@ -117,6 +135,30 @@ dictate daemon --foreground     # foreground daemon (systemd)
 dictate reload                  # reload config and dictionary
 dictate quit                    # stop the daemon
 ```
+
+### Voice assistant commands
+
+```sh
+dictate assistant toggle        # idle → listen; listening → finish; busy → interrupt
+dictate assistant start
+dictate assistant stop
+dictate assistant cancel
+dictate assistant reset         # clear in-memory conversation history
+dictate assistant status
+dictate assistant status --json # same payload used by the Waybar helper
+dictate assistant warmup        # start the LLM and check TTS/player setup
+dictate assistant doctor        # endpoint, key, player, Waybar checks
+
+dictate secrets list
+dictate secrets set tts_api_key   # reads stdin/getpass, never argv
+dictate secrets set llm_api_key
+dictate secrets unset tts_api_key
+```
+
+`assistant toggle` is deliberately tap-oriented: from idle it starts listening,
+while listening it stops and sends the turn, and while transcribing, thinking, or
+speaking it cancels. `assistant status` does not start the daemon; a hotkey
+command does.
 
 Audio, models, and dictionary:
 
@@ -149,11 +191,140 @@ dictate config get threads
 dictate config set threads 6
 dictate config edit
 
-dictate doctor                  # 21 environment checks
+dictate doctor                  # environment checks
 dictate transcribe sample.wav   # offline file transcription
 dictate transcribe sample.wav --json
 dictate transcribe sample.wav --insert
 ```
+
+## Voice assistant
+
+The assistant is a separate state machine inside the dictation daemon, not a
+second service. A turn looks like this:
+
+1. Tap `SUPER + A`. PipeWire capture starts; playback and ASR are the same ones
+   dictation uses. The Waybar module shows level and elapsed time.
+2. Tap again. The WAV is transcribed on the CPU, then the transcript is sent to
+   an OpenAI-compatible `POST /v1/chat/completions` endpoint with streaming
+   enabled.
+3. Reply tokens are split into sentences as they arrive. Each sentence is sent
+   to `POST /v1/audio/speech` through a small worker pool and played in order, so
+   speech starts before the model has finished. A few sentences are prefetched.
+4. The reply also appears as a notification, and the full turn stays in memory
+   for follow-up questions until `dictate assistant reset` or daemon exit.
+
+Tap while it is thinking or speaking to interrupt. Playback and any in-flight TTS
+requests are cancelled. Nothing is inserted into the focused window; the
+assistant is a spoken/notification interface only.
+
+### Setup
+
+The LLM can be any server that speaks the OpenAI chat API. This project was
+developed against a local Bonsai 1.7B `llama-server`, but the client does not
+depend on llama.cpp specifically:
+
+```sh
+dictate config set llm_base_url http://127.0.0.1:8080/v1
+dictate config set llm_model bonsai
+
+# Optional: let the daemon start a local server on demand.
+dictate config set llm_start_command "/path/to/Bonsai-demo/my_script.sh -m 1"
+dictate config set llm_start_cwd /path/to/Bonsai-demo
+```
+
+When `llm_start_command` is set and the endpoint is local but unreachable, the
+daemon runs the command with `llm_start_cwd`, logs stdout/stderr to
+`$XDG_STATE_HOME/dictate-unlimited/llm-server.log`, and waits up to `llm_start_timeout`
+seconds for `/models`. A remote endpoint must already be running.
+
+Phase 1 TTS is Xiaomi MiMo's voice service. It is an OpenAI-compatible chat
+endpoint, but audio comes back as Base64 in the chat response rather than from
+`/v1/audio/speech`; set `tts_provider = "mimo"` for that shape. Use the base URL
+shown in your Token Plan console (for example
+`https://token-plan-sgp.xiaomimimo.com/v1`):
+
+```sh
+dictate config set tts_provider mimo
+dictate config set tts_base_url https://token-plan-sgp.xiaomimimo.com/v1
+dictate config set tts_model mimo-v2.5-tts
+dictate config set tts_voice Mia
+dictate config set tts_format wav
+dictate secrets set tts_api_key    # paste when prompted, then Ctrl+D
+```
+
+MiMo's built-in English voices are `Mia`, `Chloe`, `Milo`, and `Dean`; the
+Chinese voices are `冰糖`, `茉莉`, `苏打`, and `白桦`; the default is
+`mimo_default`. `mimo-v2.5-tts-voicedesign` takes a voice description instead
+of a preset, and `mimo-v2.5-tts-voiceclone` takes a Base64 audio sample, so the
+built-in `mimo-v2.5-tts` model is the right choice for this assistant.
+
+For a provider that follows the more common OpenAI `/v1/audio/speech` shape,
+leave `tts_provider = "openai"`. `tts_provider = "none"` disables synthesis;
+replies are still shown as notifications. If the endpoint or key is missing, the
+turn still completes and the reply is text-only, with a notification explaining
+why.
+
+Check everything without using the microphone:
+
+```sh
+dictate assistant doctor
+dictate assistant warmup
+```
+
+`doctor` is read-only: it probes the LLM endpoint, validates TTS configuration
+and key source, finds a player, and checks for `notify-send` and the Waybar
+helper. `warmup` may start the LLM server and reports the endpoint, TTS, and
+player it will use.
+
+### Keys and privacy
+
+API keys are never stored in `config.json`. Resolution order is the environment
+variable named by `tts_api_key_env`/`llm_api_key_env`, then
+`~/.config/dictate-unlimited/secrets.json` (mode `0600`). `MIMO_API_KEY` is also
+accepted as an alias for the TTS key. `dictate secrets list` reports only the
+source, never the value.
+
+The assistant sends the recognized text (not the microphone recording) to the
+LLM endpoint, and reply sentences (not your voice) to the TTS endpoint. With a
+local LLM and a local TTS server, the whole turn stays on the machine.
+
+### Waybar
+
+`install.sh` installs `dictate-assistant-waybar`. Add a custom module:
+
+```json
+"custom/dictate-assistant": {
+  "exec": "dictate-assistant-waybar",
+  "return-type": "json",
+  "interval": 1,
+  "on-click": "dictate assistant toggle",
+  "on-click-right": "dictate assistant cancel",
+  "on-click-middle": "dictate assistant reset"
+}
+```
+
+The helper prints one JSON object per invocation with `text`, `class`, `alt`,
+`tooltip`, and a `percentage` level while listening. States are `idle`,
+`listening`, `transcribing`, `thinking`, `speaking`, and `error`. The
+microphone stays visible so the module has a permanent spot; in the `listening`
+state it changes to `󰍬 Speak now` with a level bar and timer. Highlight that
+state with CSS:
+
+```css
+#custom-dictate-assistant.listening {
+  background: #ffffff;
+  color: #000000;
+  border-radius: 8px;
+  animation: dictate-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes dictate-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.55; }
+}
+```
+
+Set `DICTATE_WAYBAR_IDLE=0` to hide the microphone when idle. The module
+tolerates a stopped daemon and shows a hint instead of failing.
 
 ## Model
 
@@ -209,6 +380,48 @@ changes to a running daemon.
 | `keep_audio` | `false` | keep temporary WAV files for debugging |
 | `log_level` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
+Assistant capture, history, and presentation:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `assistant_max_seconds` | `120` | recording limit for one assistant turn (5–600) |
+| `assistant_history_turns` | `6` | question/answer pairs kept in memory (0–50) |
+| `assistant_notify_chars` | `180` | maximum characters in reply notifications (40–1000) |
+
+LLM (OpenAI-compatible chat):
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `llm_base_url` | `http://127.0.0.1:8080/v1` | chat endpoint base URL |
+| `llm_model` | `bonsai` | model name sent in requests |
+| `llm_api_key_env` | `DICTATE_LLM_API_KEY` | environment variable checked first |
+| `llm_system_prompt` | built-in | spoken-style prompt; keep replies short |
+| `llm_temperature` | `0.5` | sampling temperature (0–2) |
+| `llm_max_tokens` | `320` | reply token limit (16–4096) |
+| `llm_timeout` | `120` | request timeout in seconds (5–600) |
+| `llm_start_command` | `""` | optional command to start a local server |
+| `llm_start_cwd` | `""` | working directory for that command |
+| `llm_start_timeout` | `90` | seconds to wait for the server (5–600) |
+
+TTS (OpenAI-compatible speech):
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `tts_provider` | `openai` | `openai` (`/v1/audio/speech`), `mimo` (`/v1/chat/completions` audio), or `none` |
+| `tts_base_url` | `""` | endpoint base URL; empty disables speech |
+| `tts_model` | `""` | model name; `mimo-v2.5-tts` for MiMo |
+| `tts_voice` | `""` | OpenAI voice or MiMo built-in voice; MiMo defaults to `mimo_default` |
+| `tts_format` | `wav` | `wav`, `mp3`, `opus`, `flac`, `pcm`, or `pcm16` (MiMo: wav/mp3/pcm) |
+| `tts_speed` | `1.0` | speech rate (0.25–4.0) |
+| `tts_api_key_env` | `DICTATE_TTS_API_KEY` | environment variable checked first |
+| `tts_timeout` | `60` | request timeout in seconds (5–600) |
+| `tts_workers` | `2` | parallel synthesis workers (1–8) |
+| `tts_prefetch` | `3` | sentences synthesized ahead (1–16) |
+| `tts_max_chars` | `240` | sentence-splitter soft limit (40–2000) |
+| `tts_player` | `auto` | `auto`, `mpv`, `pw-cat`, `ffplay`, `none` |
+| `tts_volume` | `1.0` | player volume, 0–1.5 |
+| `tts_extra_body` | `{}` | extra JSON merged into the request body |
+
 Bark 3.0 is English-only, so there is no language setting. Config files from the
 Whisper-era Linux port are accepted; removed keys such as `language`,
 `beam_size`, and `whisper_bin` are ignored and dropped on the next save. A
@@ -240,16 +453,25 @@ The port refuses to run a `parakeet-cli` that does not advertise `-ng`:
 4. `dictate doctor` reports the linked GPU libraries, the runtime version, and
    the CPU-only flag.
 
-If another process occupies the GPU, this port neither sees nor touches it.
+If another process occupies the GPU, recognition neither sees nor touches it.
+The optional assistant's LLM server is the exception: it is a separate process
+started by `llm_start_command` and may use the GPU. That does not change ASR,
+which still runs with every GPU device variable cleared.
 
 ## Privacy and data
 
-Recognition and correction run locally. The only network access is an explicit
-`dictate models download` from Hugging Face. No audio or transcript leaves the
-machine, and the conversion runs on your CPU.
+Dictation recognition and correction run locally. The only network access for
+dictation is an explicit `dictate models download` from Hugging Face. No audio or
+transcript leaves the machine, and the conversion runs on your CPU.
+
+The optional voice assistant sends the recognized text (not the microphone
+recording) to the configured LLM endpoint, and each reply sentence (not your
+voice) to the configured TTS endpoint. A local LLM and a local TTS server keep
+the turn on-machine; the phase-1 Mimo TTS endpoint is remote. Assistant history
+is kept in daemon memory only and is discarded on exit or `assistant reset`.
 
 Audio is written to a private temporary WAV, transcribed, and deleted unless
-`keep_audio` is true. The last transcript stays in daemon memory for
+`keep_audio` is true. The last dictation transcript stays in daemon memory for
 `paste-last` and is lost when the daemon exits. There is no transcript history.
 
 Persistent files:
@@ -258,10 +480,16 @@ Persistent files:
 | --- | --- |
 | `~/.config/dictate-unlimited/config.json` | settings (mode 0600) |
 | `~/.config/dictate-unlimited/corrections.json` | dictionary entries |
+| `~/.config/dictate-unlimited/secrets.json` | assistant API keys (mode 0600, only if set) |
 | `~/.local/share/dictate-unlimited/models/` | converted GGML model and pinned sources |
 | `~/.local/state/dictate-unlimited/dictate-unlimited.log` | rotating log |
+| `~/.local/state/dictate-unlimited/llm-server.log` | local LLM server output, if autostarted |
 | `$XDG_RUNTIME_DIR/dictate-unlimited.sock` | local control socket |
 | `$XDG_RUNTIME_DIR/dictate-unlimited.pid` | daemon PID |
+
+Temporary TTS audio is written under the state directory with mode `0600` and
+removed after playback or cancellation. Files left by a crash are swept on the
+next assistant start.
 
 ## Optional systemd user service
 
@@ -285,6 +513,14 @@ through, and repeats the empty GPU device variables.
   once and reports what it attempted.
 - There is no GUI. Everything is controlled by the CLI, the daemon socket, and
   compositor shortcuts.
+- The assistant has no wake word and no voice-activity endpointing: you start and
+  finish each turn with the hotkey. A tap also interrupts, but there is no
+  barge-in while the microphone is closed.
+- Assistant quality and latency depend on the LLM and TTS endpoints. The default
+  pipeline speaks sentence by sentence, so the first words can arrive before the
+  model has finished the reply.
+- Hosted TTS introduces network latency and sends reply text to that provider;
+  use a local endpoint if that matters. Assistant history is not persisted.
 - Microphone selection is global rather than per-application.
 - The dictionary is explicit only; there is no automatic learning.
 - Hold mode depends on compositor `bindr` support. It is wired for Hyprland and

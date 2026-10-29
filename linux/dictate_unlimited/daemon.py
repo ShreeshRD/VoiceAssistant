@@ -13,7 +13,19 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Callable
 
-from . import __version__, asr, audio, config as config_module, corrections, insertion, ipc, models, notify, paths
+from . import (
+    __version__,
+    asr,
+    assistant as assistant_module,
+    audio,
+    config as config_module,
+    corrections,
+    insertion,
+    ipc,
+    models,
+    notify,
+    paths,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -60,6 +72,13 @@ class Engine:
         self.shutdown_event = threading.Event()
         self.started_at = 0.0
         self.shutdown_callback: Callable[[], None] | None = None
+        self.assistant = assistant_module.Assistant(
+            config,
+            capture_factory=capture_factory,
+            transcriber=transcriber,
+            notifier=self._notify,
+            clock=clock,
+        )
 
     # -- status ---------------------------------------------------------
     def _status_data(self) -> dict[str, Any]:
@@ -77,14 +96,22 @@ class Engine:
             "config": str(self.config.config_file()),
             "pid": os.getpid(),
             "version": __version__,
+            "mode": "assistant" if self.assistant.active else "dictation",
+            "assistant": self.assistant.status(),
         }
+
+    def _current_state(self) -> tuple[str, str]:
+        if self.assistant.active:
+            return self.assistant.state, self.assistant.message
+        return self.state, self.message
 
     def _response(self, ok: bool, message: str | None = None) -> dict[str, Any]:
         with self._lock:
+            state, current_message = self._current_state()
             return {
                 "ok": ok,
-                "state": self.state,
-                "message": message if message is not None else self.message,
+                "state": state,
+                "message": message if message is not None else current_message,
                 "data": self._status_data(),
             }
 
@@ -95,9 +122,9 @@ class Engine:
             self.state = state
             self.message = message
 
-    def _notify(self, message: str, urgency: str = "normal") -> None:
+    def _notify(self, message: str, urgency: str = "normal", **kwargs: Any) -> None:
         try:
-            self._notifier(self.config, message, urgency)
+            self._notifier(self.config, message, urgency, **kwargs)
         except Exception:
             LOG.debug("notification failed", exc_info=True)
 
@@ -116,6 +143,12 @@ class Engine:
             "paste-last": self.paste_last,
             "reload": self.reload,
             "quit": self.quit,
+            "assistant-start": self.assistant_start,
+            "assistant-stop": self.assistant_stop,
+            "assistant-toggle": self.assistant_toggle,
+            "assistant-cancel": self.assistant_cancel,
+            "assistant-reset": self.assistant_reset,
+            "assistant-warmup": self.assistant_warmup,
         }
         handler = handlers.get(command)
         if handler is None:
@@ -128,6 +161,8 @@ class Engine:
 
     def start(self) -> dict[str, Any]:
         with self._lock:
+            if self.assistant.active:
+                return self._response(False, f"The assistant is busy: {self.assistant.message}")
             if self.state != "idle":
                 return self._response(False, f"Busy: {self.message}")
             self.cancel_event.clear()
@@ -288,6 +323,10 @@ class Engine:
 
     def cancel(self) -> dict[str, Any]:
         with self._lock:
+            assistant_active = self.assistant.active
+        if assistant_active:
+            return self.assistant_cancel()
+        with self._lock:
             if self.state == "delivering":
                 return self._response(False, "Text delivery is already in progress.")
             if self.state in ("recording", "starting"):
@@ -324,6 +363,52 @@ class Engine:
             return self.stop() if state == "recording" else self.cancel()
         return self._response(False, f"Busy: {self.message}")
 
+    # -- voice assistant ------------------------------------------------
+    def _dictation_busy(self) -> dict[str, Any] | None:
+        if self.state != "idle":
+            return self._response(False, f"Dictation is busy: {self.message}")
+        return None
+
+    def assistant_start(self) -> dict[str, Any]:
+        with self._lock:
+            busy = self._dictation_busy()
+        if busy is not None:
+            return busy
+        result = self.assistant.start()
+        return self._response(bool(result.get("ok")), str(result.get("message", "")))
+
+    def assistant_stop(self) -> dict[str, Any]:
+        result = self.assistant.stop()
+        return self._response(bool(result.get("ok")), str(result.get("message", "")))
+
+    def assistant_toggle(self) -> dict[str, Any]:
+        state = self.assistant.state
+        if state == "idle":
+            return self.assistant_start()
+        if state == "listening":
+            return self.assistant_stop()
+        # A second tap while the model is thinking or speaking interrupts it,
+        # matching the push-to-talk feel of the Jarvis prototype.
+        return self.assistant_cancel()
+
+    def assistant_cancel(self) -> dict[str, Any]:
+        if not self.assistant.active:
+            return self._response(False, "The assistant is not running.")
+        result = self.assistant.cancel()
+        return self._response(bool(result.get("ok")), str(result.get("message", "")))
+
+    def assistant_reset(self) -> dict[str, Any]:
+        result = self.assistant.reset()
+        return self._response(bool(result.get("ok")), str(result.get("message", "")))
+
+    def assistant_warmup(self) -> dict[str, Any]:
+        with self._lock:
+            busy = self._dictation_busy()
+        if busy is not None:
+            return busy
+        result = self.assistant.warmup()
+        return self._response(bool(result.get("ok")), str(result.get("message", "")))
+
     def paste_last(self) -> dict[str, Any]:
         with self._lock:
             if self.state != "idle":
@@ -353,7 +438,7 @@ class Engine:
 
     def reload(self) -> dict[str, Any]:
         with self._lock:
-            if self.state != "idle":
+            if self.state != "idle" or self.assistant.active:
                 return self._response(False, "Cannot reload while busy.")
         try:
             new_config = config_module.load()
@@ -365,6 +450,7 @@ class Engine:
         with self._lock:
             self.config = new_config
             self.store = new_store
+            self.assistant.update_config(new_config)
             self.message = "Configuration and dictionary reloaded."
         return self._response(True)
 
@@ -374,6 +460,10 @@ class Engine:
 
     def request_shutdown(self) -> None:
         self.shutdown_event.set()
+        try:
+            self.assistant.shutdown()
+        except Exception:
+            LOG.debug("assistant shutdown failed", exc_info=True)
         with self._lock:
             capture = self.capture
             self.capture = None

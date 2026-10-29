@@ -10,6 +10,7 @@ BUILD_ASR=0
 DOWNLOAD_MODEL=""
 HYPRLAND=0
 HOLD=0
+ASSISTANT=0
 YES=0
 FORCE=0
 
@@ -25,6 +26,7 @@ while [ $# -gt 0 ]; do
       ;;
     --hyprland) HYPRLAND=1 ;;
     --hold) HOLD=1 ;;
+    --assistant) ASSISTANT=1 ;;
     --yes|-y) YES=1 ;;
     --force) FORCE=1 ;;
     -h|--help)
@@ -34,6 +36,7 @@ Usage: linux/install.sh [options]
   --download-model ID      download/convert a model and select it (default: bark-3.0)
   --hyprland               add the keybind block to Hyprland config
   --hold                   install press/release hold binds
+  --assistant              bind SUPER+A to the voice assistant (with --hyprland)
   --yes                    do not prompt
   --force                  replace an existing non-symlink launcher
 EOF
@@ -66,6 +69,15 @@ fi
 ln -sfn "$ROOT/linux/dictate" "$TARGET"
 echo "Installed launcher: $TARGET"
 
+WAYBAR_TARGET="${BIN_DIR}/dictate-assistant-waybar"
+WAYBAR_SOURCE="$ROOT/linux/waybar/dictate-assistant-waybar"
+chmod +x "$WAYBAR_SOURCE"
+if [ -e "$WAYBAR_TARGET" ] && [ ! -L "$WAYBAR_TARGET" ]; then
+  mv "$WAYBAR_TARGET" "${WAYBAR_TARGET}.bak-$(date +%Y%m%d-%H%M%S)"
+fi
+ln -sfn "$WAYBAR_SOURCE" "$WAYBAR_TARGET"
+echo "Installed Waybar helper: $WAYBAR_TARGET"
+
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "Warning: $BIN_DIR is not on PATH. Add it to your shell configuration." ;;
@@ -83,6 +95,7 @@ fi
 if [ "$HYPRLAND" -eq 1 ]; then
   ARGS=(setup --hyprland --no-download)
   [ "$HOLD" -eq 1 ] && ARGS+=(--hold)
+  [ "$ASSISTANT" -eq 1 ] && ARGS+=(--assistant)
   [ "$YES" -eq 1 ] && ARGS+=(--yes)
   "$TARGET" "${ARGS[@]}"
 elif [ "$DOWNLOAD_MODEL" = "" ]; then

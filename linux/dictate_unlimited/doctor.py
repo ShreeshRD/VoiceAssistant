@@ -10,7 +10,20 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import __version__, asr, audio, config as config_module, corrections, ipc, models, paths
+from . import (
+    __version__,
+    asr,
+    audio,
+    config as config_module,
+    corrections,
+    ipc,
+    llm,
+    models,
+    paths,
+    playback,
+    secrets,
+    tts,
+)
 
 OK = "OK"
 WARN = "WARN"
@@ -150,6 +163,53 @@ def _check_daemon() -> Check:
     return Check(WARN, "daemon", response.get("message", "unknown response"))
 
 
+def _check_assistant(config: config_module.Config) -> list[Check]:
+    checks: list[Check] = []
+    client = llm.LLMClient(config)
+    alive, detail = client.health()
+    if alive:
+        checks.append(
+            Check(OK, "assistant LLM", f"{config.llm_base_url} ({detail}) · {config.llm_model}")
+        )
+    else:
+        hint = (
+            f"start command configured ({config.llm_start_command})"
+            if config.llm_start_command
+            else "set llm_start_command or start the server yourself"
+        )
+        checks.append(
+            Check(WARN, "assistant LLM", f"{config.llm_base_url} unreachable; {hint}")
+        )
+
+    tts_client = tts.TTSClient(config)
+    if not tts_client.configured:
+        hint = (
+            "not configured; set tts_base_url and tts_model "
+            "(for example mimo-v2.5-tts), then store tts_api_key"
+            if config.tts_provider == "mimo"
+            else "not configured; set tts_base_url, tts_model, tts_voice, then store tts_api_key"
+        )
+        checks.append(Check(WARN, "assistant TTS", hint))
+    else:
+        try:
+            tts_client.check()
+            source = secrets.source("tts_api_key", config.tts_api_key_env)
+            checks.append(
+                Check(OK, "assistant TTS", f"{tts_client.endpoint()} · key: {source}")
+            )
+        except tts.TTSUnavailable as exc:
+            checks.append(Check(WARN, "assistant TTS", str(exc)))
+
+    method = playback.Player(config).method()
+    if method:
+        checks.append(Check(OK, "assistant player", method))
+    else:
+        checks.append(
+            Check(FAIL, "assistant player", "install mpv (recommended), pw-cat, or ffplay")
+        )
+    return checks
+
+
 def _check_corrections() -> Check:
     store = corrections.CorrectionStore(paths.corrections_path())
     if store.load_error:
@@ -173,6 +233,7 @@ def run() -> list[Check]:
     checks.extend(_check_wayland(config))
     checks.extend(_check_asr(config))
     checks.extend(_check_model(config))
+    checks.extend(_check_assistant(config))
     return checks
 
 

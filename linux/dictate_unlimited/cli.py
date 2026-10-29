@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import math
 import os
@@ -25,8 +26,12 @@ from . import (
     doctor,
     insertion,
     ipc,
+    llm,
     models,
     paths,
+    playback,
+    secrets,
+    tts,
 )
 
 
@@ -120,6 +125,41 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser = dictionary_sub.add_parser("apply", parents=[common], help="apply corrections to text")
     apply_parser.add_argument("text", nargs="+")
 
+    assistant_parser = sub.add_parser(
+        "assistant", parents=[common], help="voice assistant: ASR → LLM → TTS"
+    )
+    assistant_sub = assistant_parser.add_subparsers(dest="assistant_command")
+    for name, help_text in (
+        ("toggle", "start listening, or finish/interrupt the current turn"),
+        ("start", "start listening"),
+        ("stop", "finish recording and ask the LLM"),
+        ("cancel", "discard the recording or interrupt the reply"),
+        ("reset", "clear the in-memory conversation history"),
+        ("warmup", "start the LLM server and check TTS/player configuration"),
+    ):
+        assistant_sub.add_parser(name, parents=[common], help=help_text)
+    assistant_status = assistant_sub.add_parser(
+        "status", parents=[common], help="show assistant state (used by Waybar)"
+    )
+    assistant_status.add_argument("--json", action="store_true", help="machine-readable output")
+    assistant_sub.add_parser(
+        "doctor", parents=[common], help="check the LLM, TTS, and playback setup"
+    )
+
+    secrets_parser = sub.add_parser(
+        "secrets", parents=[common], help="store API keys privately (mode 0600)"
+    )
+    secrets_sub = secrets_parser.add_subparsers(dest="secrets_command")
+    secrets_sub.add_parser("list", parents=[common], help="show which secrets are configured")
+    secrets_set = secrets_sub.add_parser(
+        "set", parents=[common], help="store a key (reads stdin, never argv)"
+    )
+    secrets_set.add_argument("name", choices=list(secrets.SECRET_KEYS))
+    secrets_unset = secrets_sub.add_parser(
+        "unset", parents=[common], help="remove a stored key"
+    )
+    secrets_unset.add_argument("name", choices=list(secrets.SECRET_KEYS))
+
     config_parser = sub.add_parser("config", parents=[common], help="inspect or edit settings")
     config_sub = config_parser.add_subparsers(dest="config_command")
     config_sub.add_parser("path", parents=[common], help="print the config file path")
@@ -138,6 +178,11 @@ def build_parser() -> argparse.ArgumentParser:
     setup.add_argument("--build-asr", action="store_true", help="build the whisper.cpp CPU-only runtime")
     setup.add_argument("--hyprland", action="store_true", help="append a keybind block to Hyprland config")
     setup.add_argument("--hold", action="store_true", help="install press/release hold binds")
+    setup.add_argument(
+        "--assistant",
+        action="store_true",
+        help="also bind SUPER+A to the voice assistant (tap to talk)",
+    )
     setup.add_argument("--yes", "-y", action="store_true", help="do not prompt")
     return parser
 
@@ -198,9 +243,17 @@ def _print_status(response: dict[str, Any]) -> None:
     print(f"corrections: {data.get('corrections', 0)}")
     print(f"last:        {'available' if data.get('has_last') else 'none'} ({data.get('last_chars', 0)} chars)")
     print(f"pid:         {data.get('pid', '?')}")
-    if state in ("recording", "testing", "starting"):
-        print(f"duration:    {data.get('seconds', 0):.1f}s")
-        print(f"level:       {_meter(float(data.get('level', 0)))}")
+    assistant = data.get("assistant")
+    if isinstance(assistant, dict) and assistant.get("active"):
+        print(f"assistant:   {assistant.get('state')} · {assistant.get('message', '')}")
+        if assistant.get("heard"):
+            print(f"heard:       {assistant['heard']}")
+        if assistant.get("reply"):
+            print(f"reply:       {assistant['reply']}")
+    if state in ("recording", "testing", "starting", "listening"):
+        live = assistant if isinstance(assistant, dict) and assistant.get("active") else data
+        print(f"duration:    {live.get('seconds', 0):.1f}s")
+        print(f"level:       {_meter(float(live.get('level', 0)))}")
 
 
 def _status_watch(config: config_module.Config) -> int:
@@ -579,6 +632,179 @@ def _cmd_config(args: argparse.Namespace) -> int:
     return 1
 
 
+def _print_assistant_status(response: dict[str, Any]) -> None:
+    data = response.get("data", {})
+    assistant = data.get("assistant", {})
+    if not isinstance(assistant, dict):
+        assistant = {}
+    state = response.get("state") or assistant.get("state", "idle")
+    print(f"assistant:   {state} · {response.get('message') or assistant.get('message', '')}")
+    if assistant.get("heard"):
+        print(f"heard:       {assistant['heard']}")
+    if assistant.get("reply"):
+        print(f"reply:       {assistant['reply']}")
+    print(f"llm:         {assistant.get('llm_model', '?')} at {assistant.get('llm_base_url', '?')}")
+    tts_line = assistant.get("tts_provider", "?")
+    if assistant.get("tts_configured"):
+        tts_line += " · configured"
+    else:
+        tts_line += " · not configured"
+    print(f"tts:         {tts_line}")
+    print(f"player:      {assistant.get('tts_player') or 'missing'}")
+    print(f"history:     {assistant.get('history_turns', 0)} turn(s) in memory")
+
+
+def _assistant_doctor(config: config_module.Config) -> int:
+    checks: list[tuple[str, str, str]] = []
+
+    client = llm.LLMClient(config)
+    alive, detail = client.health()
+    if alive:
+        checks.append(("OK", "llm endpoint", f"{config.llm_base_url} ({detail})"))
+    else:
+        hint = (
+            f"start with: {config.llm_start_command}"
+            if config.llm_start_command
+            else "set llm_start_command or start llama-server yourself"
+        )
+        checks.append(("WARN", "llm endpoint", f"{config.llm_base_url} unreachable: {detail}; {hint}"))
+
+    tts_client = tts.TTSClient(config)
+    if not tts_client.configured:
+        hint = (
+            "not configured; set tts_base_url and tts_model "
+            "(for example mimo-v2.5-tts)"
+            if config.tts_provider == "mimo"
+            else "not configured; set tts_base_url, tts_model, and tts_voice "
+            "(`dictate config set ...`)"
+        )
+        checks.append(("WARN", "tts", hint + " then store tts_api_key"))
+    else:
+        try:
+            tts_client.check()
+            source = secrets.source("tts_api_key", config.tts_api_key_env)
+            checks.append(("OK", "tts", f"{tts_client.endpoint()} · key: {source}"))
+        except tts.TTSUnavailable as exc:
+            checks.append(("WARN", "tts", str(exc)))
+
+    player = playback.Player(config)
+    method = player.method()
+    if method:
+        checks.append(("OK", "audio player", method))
+    else:
+        checks.append(("FAIL", "audio player", "install mpv, pw-cat, or ffplay"))
+
+    if shutil.which("notify-send"):
+        checks.append(("OK", "notifications", shutil.which("notify-send") or ""))
+    else:
+        checks.append(("WARN", "notifications", "notify-send missing; replies stay in Waybar/logs"))
+
+    waybar = shutil.which("dictate-assistant-waybar")
+    if waybar is None:
+        candidate = paths.repo_root() / "linux" / "waybar" / "dictate-assistant-waybar"
+        if candidate.is_file():
+            waybar = str(candidate)
+    if waybar:
+        checks.append(("OK", "waybar module", waybar))
+    else:
+        checks.append(("WARN", "waybar module", "run linux/install.sh to install the helper"))
+
+    width = max(len(name) for _, name, _ in checks)
+    for status, name, value in checks:
+        print(f"[{status:4}] {name:<{width}}  {value}")
+    failures = sum(1 for status, _, _ in checks if status == "FAIL")
+    warnings = sum(1 for status, _, _ in checks if status == "WARN")
+    print()
+    print(f"{len(checks)} checks · {failures} failure(s) · {warnings} warning(s)")
+    return 1 if failures else 0
+
+
+def _cmd_assistant(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    if config is None:
+        return 1
+    command = getattr(args, "assistant_command", None) or "status"
+
+    if command == "doctor":
+        return _assistant_doctor(config)
+
+    if command == "status":
+        try:
+            response = ipc.request("status", timeout=3, autostart=False)
+        except ipc.IPCError as exc:
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "running": False,
+                            "state": "idle",
+                            "message": str(exc),
+                            "data": {"assistant": {"state": "idle", "message": str(exc)}},
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
+            else:
+                print(str(exc), file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(response, indent=2, sort_keys=True))
+        else:
+            _print_assistant_status(response)
+        return 0 if response.get("ok") else 1
+
+    if command == "warmup":
+        timeout = config.llm_start_timeout + 30
+        try:
+            response = ipc.request("assistant-warmup", timeout=timeout, autostart=True)
+        except ipc.IPCError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(str(response.get("message", "")))
+        return 0 if response.get("ok") else 1
+
+    return _client(f"assistant-{command}", config, autostart=True)
+
+
+def _cmd_secrets(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    if config is None:
+        return 1
+    command = getattr(args, "secrets_command", None) or "list"
+    env_names = {
+        "tts_api_key": config.tts_api_key_env,
+        "llm_api_key": config.llm_api_key_env,
+    }
+    try:
+        if command == "list":
+            for name in secrets.SECRET_KEYS:
+                print(f"{name:20} {secrets.source(name, env_names[name])}")
+            print(f"\nfile: {paths.secrets_path()} (mode 0600)")
+            return 0
+        if command == "set":
+            name = args.name
+            if sys.stdin.isatty():
+                value = getpass.getpass(f"{name}: ")
+            else:
+                value = sys.stdin.readline().strip()
+            secrets.set_value(name, value)
+            print(f"{name} stored in {paths.secrets_path()} (mode 0600)")
+            print("Run `dictate reload` if the daemon is running.")
+            return 0
+        if command == "unset":
+            secrets.unset(args.name)
+            print(f"{args.name} removed")
+            print("Run `dictate reload` if the daemon is running.")
+            return 0
+    except secrets.SecretsError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print("unknown secrets command", file=sys.stderr)
+    return 1
+
+
 def _hyprland_path() -> Path:
     return _xdg("XDG_CONFIG_HOME", Path.home() / ".config") / "hypr" / "hyprland.conf"
 
@@ -595,11 +821,11 @@ def _dictate_command() -> str:
     return str(Path.home() / ".local" / "bin" / "dictate")
 
 
-def hyprland_block(hold: bool = False) -> str:
+def hyprland_block(hold: bool = False, assistant: bool = False) -> str:
     command = _dictate_command()
     lines = [
         "# >>> dictate-unlimited >>>",
-        "# CPU-only PipeWire + Bark 3.0 dictation. Reload with: hyprctl reload",
+        "# CPU-only PipeWire + Bark 3.0 dictation; optional voice assistant. Reload: hyprctl reload",
         f"exec-once = {command} daemon --detach",
     ]
     if hold:
@@ -615,15 +841,23 @@ def hyprland_block(hold: bool = False) -> str:
         [
             f"bind = SUPER SHIFT, V, exec, {command} paste-last",
             f"bind = SUPER, Escape, exec, {command} cancel",
-            "# <<< dictate-unlimited <<<",
         ]
     )
+    if assistant:
+        lines.extend(
+            [
+                "# Voice assistant: tap to talk, tap again to finish, or tap while it",
+                "# is thinking/speaking to interrupt. No separate cancel bind is needed.",
+                f"bind = SUPER, A, exec, {command} assistant toggle",
+            ]
+        )
+    lines.append("# <<< dictate-unlimited <<<")
     return "\n".join(lines)
 
 
-def _install_hyprland(hold: bool, yes: bool) -> int:
+def _install_hyprland(hold: bool, yes: bool, assistant: bool = False) -> int:
     path = _hyprland_path()
-    block = hyprland_block(hold)
+    block = hyprland_block(hold, assistant)
     if not path.exists():
         print(f"Hyprland config not found: {path}", file=sys.stderr)
         return 1
@@ -720,16 +954,21 @@ def _cmd_setup(args: argparse.Namespace) -> int:
                 config_module.save(config)
 
     print("\nAdd this to your Hyprland config, or run `dictate setup --hyprland`:\n")
-    print(hyprland_block(args.hold))
+    print(hyprland_block(args.hold, args.assistant))
     if args.hyprland:
-        result = _install_hyprland(args.hold, args.yes)
+        result = _install_hyprland(args.hold, args.yes, args.assistant)
         if result != 0:
             return result
     print("\nStart the daemon with one of:")
     print(f"  {_dictate_command()} daemon --detach")
     print("  exec-once in Hyprland (included above)")
     print("\nThen press Super+D to dictate, Super+Shift+V to paste the last result.")
-    print("Run `dictate doctor` at any time. No GPU is used; Bark 3.0 runs on CPU.")
+    if args.assistant:
+        print("Press Super+A to talk to the assistant; Super+Shift+A interrupts it.")
+        print("Check the assistant with: dictate assistant doctor")
+        print("Configure TTS with: dictate config set tts_base_url <url>, then")
+        print("  dictate secrets set tts_api_key")
+    print("Run `dictate doctor` at any time. No GPU is used for ASR; Bark 3.0 runs on CPU.")
     return 0
 
 
@@ -777,6 +1016,10 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_mic(args)
     if command == "dictionary":
         return _cmd_dictionary(args)
+    if command == "assistant":
+        return _cmd_assistant(args)
+    if command == "secrets":
+        return _cmd_secrets(args)
     if command == "config":
         return _cmd_config(args)
     if command == "doctor":

@@ -20,8 +20,13 @@ bind = SUPER, D, exec, dictate toggle
 # Paste the last completed dictation again.
 bind = SUPER SHIFT, V, exec, dictate paste-last
 
-# Discard a recording or cancel an in-flight transcription.
+# Discard a recording or cancel an in-flight transcription/reply.
 bind = SUPER, Escape, exec, dictate cancel
+
+# --- Optional voice assistant (ASR → local LLM → TTS) ---
+# Tap SUPER+A to talk, tap again to finish. Tap while it is thinking/speaking
+# to interrupt. Add it with: dictate setup --hyprland --assistant
+# bind = SUPER, A, exec, dictate assistant toggle
 
 # The daemon itself can also be controlled from a terminal:
 #   dictate status

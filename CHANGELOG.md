@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.2.0-linux.1 · Voice assistant
+
+- Optional voice assistant inside the existing daemon: tap to listen, tap again
+  to transcribe and answer, tap while thinking or speaking to interrupt.
+  Dictation keeps its own state machine and behaves as before.
+- Reuses PipeWire capture and the CPU-only Bark runtime for assistant input;
+  audio never goes to the LLM.
+- Streaming OpenAI-compatible chat client with conversation history held in
+  memory, sentence splitting, bounded parallel synthesis, ordered playback, and
+  prefetch of upcoming sentences.
+- TTS client with two request shapes: OpenAI `/v1/audio/speech` and the
+  MiMo-V2.5-TTS chat-completions API with Base64 audio, behind a provider
+  abstraction so a local model can replace either by configuration.
+- API keys stored outside `config.json`: environment first, then a mode-0600
+  `secrets.json`; `dictate secrets set` reads from stdin and never argv.
+- Optional local LLM autostart with log capture and readiness timeout.
+- Waybar module (`dictate-assistant-waybar`) plus short replaced notifications
+  for the transcript and reply.
+- `dictate assistant` commands (`toggle`, `start`, `stop`, `cancel`, `reset`,
+  `status`, `warmup`, `doctor`) and `dictate setup --hyprland --assistant` binds
+  `SUPER + A` to toggle/finish/interrupt; dictation binds unchanged. The toggle
+  interrupts an in-flight reply, so no separate cancel shortcut is needed.
+- Assistant configuration validation plus `doctor` checks for the LLM endpoint,
+  TTS key source, player, notifications, and Waybar helper.
+- 88 unit tests covering the splitter, think-tag filtering, clients, secrets,
+  pipeline, and a full simulated turn.
+
 ## 1.1.0-linux.1 · Linux CPU-only port
 
 - New additive Linux port under `linux/`; the macOS Swift app is unchanged.
@@ -44,4 +71,4 @@ Initial source-only preview from DOO MADE.
 - Notch/floating feedback and Settings reopening for the menu-bar app.
 
 Build from source. No notarized binary, hosted CI, or broad device compatibility
-claim is included. See docs/TESTING.md and docs/LICENSING.md.
+claim is included.

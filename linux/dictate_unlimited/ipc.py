@@ -18,7 +18,19 @@ from . import paths
 
 LOG = logging.getLogger(__name__)
 MAX_LINE = 16 * 1024
-AUTOSTART_COMMANDS = {"toggle", "start", "stop", "paste-last", "cancel"}
+AUTOSTART_COMMANDS = {
+    "toggle",
+    "start",
+    "stop",
+    "paste-last",
+    "cancel",
+    "assistant-toggle",
+    "assistant-start",
+    "assistant-stop",
+    "assistant-cancel",
+    "assistant-reset",
+    "assistant-warmup",
+}
 _SERVER: "Server | None" = None
 
 

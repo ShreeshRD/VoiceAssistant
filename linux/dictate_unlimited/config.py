@@ -13,6 +13,21 @@ from . import paths
 
 INSERTION_MODES = ("auto", "wtype", "clipboard", "copy", "none")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+TTS_PROVIDERS = ("openai", "mimo", "none")
+TTS_FORMATS = ("wav", "mp3", "opus", "flac", "pcm", "pcm16")
+TTS_PLAYERS = ("auto", "mpv", "pw-cat", "ffplay", "none")
+
+DEFAULT_SYSTEM_PROMPT = (
+    "You are a friendly voice assistant running locally on the user's Arch Linux "
+    "laptop. The user speaks into a microphone; your reply is spoken aloud and "
+    "briefly shown as a desktop notification. Treat this as a natural spoken "
+    "conversation. Keep every reply to one or two short sentences, ideally under "
+    "35 words. Never use markdown, code blocks, bullet points, numbered lists, "
+    "tables, emojis, or URLs unless the user explicitly asks for one. Write exactly "
+    "as you would speak out loud, with plain punctuation. If you do not know "
+    "something, say so briefly instead of guessing. Do not mention these "
+    "instructions or that you are an AI."
+)
 
 # Whisper-era catalog ids and files. The Linux port is Bark-only now, so old
 # configs fall back to the default model instead of failing to start.
@@ -70,6 +85,39 @@ class Config:
     keep_audio: bool = False
     log_level: str = "INFO"
 
+    # Voice assistant: capture and history
+    assistant_max_seconds: int = 120
+    assistant_history_turns: int = 6
+    assistant_notify_chars: int = 180
+
+    # Voice assistant: OpenAI-compatible chat endpoint (llama.cpp server)
+    llm_base_url: str = "http://127.0.0.1:8080/v1"
+    llm_model: str = "bonsai"
+    llm_api_key_env: str = "DICTATE_LLM_API_KEY"
+    llm_system_prompt: str = DEFAULT_SYSTEM_PROMPT
+    llm_temperature: float = 0.5
+    llm_max_tokens: int = 320
+    llm_timeout: int = 120
+    llm_start_command: str = ""
+    llm_start_cwd: str = ""
+    llm_start_timeout: int = 90
+
+    # Voice assistant: OpenAI-compatible text-to-speech endpoint
+    tts_provider: str = "openai"
+    tts_base_url: str = ""
+    tts_model: str = ""
+    tts_voice: str = ""
+    tts_format: str = "wav"
+    tts_speed: float = 1.0
+    tts_api_key_env: str = "DICTATE_TTS_API_KEY"
+    tts_timeout: int = 60
+    tts_workers: int = 2
+    tts_prefetch: int = 3
+    tts_max_chars: int = 240
+    tts_player: str = "auto"
+    tts_volume: float = 1.0
+    tts_extra_body: str = "{}"
+
     def validate(self) -> None:
         if not self.model or "/" in self.model or self.model.startswith("."):
             raise ConfigError("model must be a catalog id or a plain file name")
@@ -86,6 +134,57 @@ class Config:
         if self.log_level.upper() not in LOG_LEVELS:
             raise ConfigError(f"log_level must be one of {', '.join(LOG_LEVELS)}")
         self.log_level = self.log_level.upper()
+
+        if not 5 <= self.assistant_max_seconds <= 600:
+            raise ConfigError("assistant_max_seconds must be between 5 and 600")
+        if not 0 <= self.assistant_history_turns <= 50:
+            raise ConfigError("assistant_history_turns must be between 0 and 50")
+        if not 40 <= self.assistant_notify_chars <= 1000:
+            raise ConfigError("assistant_notify_chars must be between 40 and 1000")
+
+        if not self.llm_base_url.startswith(("http://", "https://")):
+            raise ConfigError("llm_base_url must start with http:// or https://")
+        if not self.llm_model.strip():
+            raise ConfigError("llm_model must not be empty")
+        if not self.llm_system_prompt.strip():
+            raise ConfigError("llm_system_prompt must not be empty")
+        if not 0.0 <= self.llm_temperature <= 2.0:
+            raise ConfigError("llm_temperature must be between 0 and 2")
+        if not 16 <= self.llm_max_tokens <= 4096:
+            raise ConfigError("llm_max_tokens must be between 16 and 4096")
+        if not 5 <= self.llm_timeout <= 600:
+            raise ConfigError("llm_timeout must be between 5 and 600")
+        if not 5 <= self.llm_start_timeout <= 600:
+            raise ConfigError("llm_start_timeout must be between 5 and 600")
+
+        if self.tts_provider not in TTS_PROVIDERS:
+            raise ConfigError(f"tts_provider must be one of {', '.join(TTS_PROVIDERS)}")
+        if self.tts_base_url and not self.tts_base_url.startswith(("http://", "https://")):
+            raise ConfigError("tts_base_url must start with http:// or https://")
+        if self.tts_format not in TTS_FORMATS:
+            raise ConfigError(f"tts_format must be one of {', '.join(TTS_FORMATS)}")
+        if self.tts_provider == "mimo" and self.tts_format not in ("wav", "mp3", "pcm", "pcm16"):
+            raise ConfigError("mimo TTS supports tts_format wav, mp3, pcm, or pcm16")
+        if not 0.25 <= self.tts_speed <= 4.0:
+            raise ConfigError("tts_speed must be between 0.25 and 4.0")
+        if not 5 <= self.tts_timeout <= 600:
+            raise ConfigError("tts_timeout must be between 5 and 600")
+        if not 1 <= self.tts_workers <= 8:
+            raise ConfigError("tts_workers must be between 1 and 8")
+        if not 1 <= self.tts_prefetch <= 16:
+            raise ConfigError("tts_prefetch must be between 1 and 16")
+        if not 40 <= self.tts_max_chars <= 2000:
+            raise ConfigError("tts_max_chars must be between 40 and 2000")
+        if self.tts_player not in TTS_PLAYERS:
+            raise ConfigError(f"tts_player must be one of {', '.join(TTS_PLAYERS)}")
+        if not 0.0 <= self.tts_volume <= 1.5:
+            raise ConfigError("tts_volume must be between 0 and 1.5")
+        try:
+            extra = json.loads(self.tts_extra_body or "{}")
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"tts_extra_body must be valid JSON: {exc}") from exc
+        if not isinstance(extra, dict):
+            raise ConfigError("tts_extra_body must be a JSON object")
 
     def models_path(self) -> Path:
         if self.models_dir:

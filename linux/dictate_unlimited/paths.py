@@ -41,6 +41,18 @@ def corrections_path() -> Path:
     return config_dir() / "corrections.json"
 
 
+def secrets_path() -> Path:
+    return config_dir() / "secrets.json"
+
+
+def assistant_log_path() -> Path:
+    return state_dir() / "assistant.log"
+
+
+def llm_log_path() -> Path:
+    return state_dir() / "llm-server.log"
+
+
 def models_dir() -> Path:
     return data_dir() / "models"
 

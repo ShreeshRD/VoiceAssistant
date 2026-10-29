@@ -5,4 +5,4 @@ repository root. It shares the product's behaviour and text-correction rules,
 but not its Swift/Core ML runtime.
 """
 
-__version__ = "1.1.0-linux.1"
+__version__ = "1.2.0-linux.1"

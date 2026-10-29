@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""Waybar custom module for the Dictate Unlimited voice assistant.
+
+Prints one JSON object per invocation.  Configure it with ``"exec"`` and a short
+``"interval"`` (200-500 ms while active; 1-2 s when idle):
+
+    "custom/dictate-assistant": {
+      "exec": "dictate-assistant-waybar",
+      "return-type": "json",
+      "interval": 1,
+      "on-click": "dictate assistant toggle",
+      "on-click-right": "dictate assistant cancel",
+      "on-click-middle": "dictate assistant reset"
+    }
+
+The microphone is always visible.  While listening the module switches to a
+high-contrast ``Speak now`` label with a live level bar and timer, so it is
+obvious when the assistant is waiting for speech.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ICONS = {
+    "idle": "󰍬",
+    "listening": "󰍬",
+    "transcribing": "󰔟",
+    "thinking": "󰧑",
+    "speaking": "󰕾",
+    "error": "󰅚",
+}
+
+LABELS = {
+    "listening": "Speak now",
+    "transcribing": "Transcribing…",
+    "thinking": "Thinking…",
+    "speaking": "Speaking…",
+    "error": "Error",
+}
+
+BARS = "▁▂▃▄▅▆▇█"
+
+
+def dictate_command() -> str | None:
+    found = shutil.which("dictate")
+    if found:
+        return found
+    fallback = Path.home() / ".local" / "bin" / "dictate"
+    if fallback.is_file() and os.access(fallback, os.X_OK):
+        return str(fallback)
+    return None
+
+
+def level_bar(level: float) -> str:
+    try:
+        value = max(0.0, min(1.0, float(level)))
+    except (TypeError, ValueError):
+        return ""
+    index = min(len(BARS) - 1, max(0, round(value * (len(BARS) - 1))))
+    return BARS[index]
+
+
+def clock(seconds: object, limit: int = 0) -> str:
+    try:
+        total = max(0, int(float(seconds)))
+    except (TypeError, ValueError):
+        total = 0
+    if limit:
+        total = min(total, limit)
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def emit(payload: dict[str, object]) -> None:
+    print(json.dumps(payload, ensure_ascii=False), flush=True)
+
+
+def main() -> int:
+    command = dictate_command()
+    idle_text = ICONS["idle"]
+    if os.environ.get("DICTATE_WAYBAR_IDLE") == "0":
+        idle_text = ""
+    if command is None:
+        emit(
+            {
+                "text": idle_text,
+                "class": "idle",
+                "alt": "idle",
+                "tooltip": "dictate is not installed",
+            }
+        )
+        return 0
+
+    try:
+        completed = subprocess.run(
+            [command, "assistant", "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        completed = None
+
+    if completed is None or completed.returncode not in (0, 1) or not completed.stdout.strip():
+        emit(
+            {
+                "text": idle_text,
+                "class": "idle",
+                "alt": "idle",
+                "tooltip": "dictate daemon is not running; start with: dictate daemon --detach",
+            }
+        )
+        return 0
+
+    try:
+        response = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        emit(
+            {
+                "text": idle_text,
+                "class": "idle",
+                "alt": "idle",
+                "tooltip": "could not read dictate status",
+            }
+        )
+        return 0
+
+    data = response.get("data") or {}
+    assistant = data.get("assistant") or {}
+    if not isinstance(assistant, dict):
+        assistant = {}
+    state = str(assistant.get("state") or response.get("state") or "idle")
+    if state not in ICONS:
+        state = "error" if assistant.get("error") else "idle"
+    message = str(assistant.get("message") or response.get("message") or "")
+    heard = str(assistant.get("heard") or "")
+    reply = str(assistant.get("reply") or "")
+    error = str(assistant.get("error") or "")
+
+    text = idle_text
+    if state != "idle":
+        icon = ICONS.get(state, ICONS["idle"])
+        label = LABELS.get(state, "")
+        if state == "listening":
+            text = f"{icon} {label} {level_bar(assistant.get('level', 0.0))}"
+            text += f" {clock(assistant.get('seconds', 0))}"
+        elif label:
+            text = f"{icon} {label}"
+
+    tooltip_lines = [f"Assistant: {state}", message]
+    if heard:
+        tooltip_lines.append(f"Heard: {heard[:300]}")
+    if reply:
+        tooltip_lines.append(f"Reply: {reply[:400]}")
+    if error:
+        tooltip_lines.append(f"Error: {error[:300]}")
+    payload: dict[str, object] = {
+        "text": text.strip(),
+        "class": [state] + (["active"] if state != "idle" else []),
+        "alt": state,
+        "tooltip": "\n".join(line for line in tooltip_lines if line),
+    }
+    percentage = data.get("assistant", {})
+    if isinstance(percentage, dict) and percentage.get("active"):
+        payload["percentage"] = round(float(percentage.get("level", 0.0)) * 100)
+    emit(payload)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
