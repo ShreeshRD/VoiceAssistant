@@ -10,8 +10,8 @@ from array import array
 from pathlib import Path
 from unittest import mock
 
-from dictate_unlimited import asr, audio
-from dictate_unlimited.insertion import sanitize_for_typing
+from ASR import asr, audio
+from ASR.insertion import sanitize_for_typing
 
 
 def write_wav(path: Path, samples: list[int], rate: int = audio.SAMPLE_RATE) -> None:

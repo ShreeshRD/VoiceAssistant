@@ -3,7 +3,7 @@
 Keys are intentionally kept out of ``config.json``.  Resolution order is:
 
 1. the environment variable named by the relevant ``*_api_key_env`` setting,
-2. an entry in ``$XDG_CONFIG_HOME/dictate-unlimited/secrets.json``.
+2. an entry in ``$XDG_CONFIG_HOME/speech-flow/secrets.json``.
 
 The secrets file is written atomically with mode ``0600`` and is never printed
 by the CLI.

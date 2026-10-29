@@ -9,7 +9,7 @@ import subprocess
 from . import config as config_module
 
 LOG = logging.getLogger(__name__)
-APP = "Dictate Unlimited"
+APP = "Speech Flow"
 
 
 def notify(
@@ -20,7 +20,7 @@ def notify(
     *,
     title: str = APP,
     replace_id: int | None = None,
-    group: str = "dictate-unlimited",
+    group: str = "speech-flow",
     icon: str | None = None,
 ) -> None:
     """Show a notification.

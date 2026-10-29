@@ -528,7 +528,7 @@ def run(config: config_module.Config, *, detach: bool = False, foreground: bool 
     if detach:
         _daemonize()
     configure_logging(config, foreground=foreground or not detach)
-    LOG.info("starting dictate-unlimited %s (cpu-only)", __version__)
+    LOG.info("starting speech-flow %s (cpu-only)", __version__)
     LOG.info("config: %s", config.config_file())
     try:
         store = corrections.CorrectionStore(paths.corrections_path())

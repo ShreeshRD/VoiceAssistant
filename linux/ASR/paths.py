@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-APP_NAME = "dictate-unlimited"
+APP_NAME = "speech-flow"
 
 
 def _xdg(name: str, fallback: Path) -> Path:

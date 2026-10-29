@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dictate_unlimited import asr, config as config_module
+from ASR import asr, config as config_module
 
 
 def _fake(directory: Path, body: str) -> Path:
@@ -60,6 +60,14 @@ class ASRTests(unittest.TestCase):
         with self.assertRaises(asr.ASRError):
             asr.find_asr(self.config)
         self.assertFalse(os.access(binary, os.X_OK))
+
+    def test_capability_probe_sets_library_path(self) -> None:
+        binary = _fake(
+            self.root,
+            'if [ -z "$LD_LIBRARY_PATH" ]; then exit 127; fi\n'
+            'if [ "$1" = "--help" ]; then echo "  -ng, --no-gpu"; fi\n',
+        )
+        self.assertTrue(asr.Capabilities(binary).no_gpu)
 
 
 if __name__ == "__main__":

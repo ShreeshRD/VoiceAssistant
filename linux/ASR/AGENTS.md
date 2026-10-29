@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The `dictate_unlimited` package implements the Linux daemon, CLI, CPU-only ASR, Wayland insertion, configuration and secrets, model management, and the optional voice assistant (LLM streaming, TTS providers, playback, notifications).
+The `ASR` package implements the Linux daemon, CLI, CPU-only ASR, Wayland insertion, configuration and secrets, model management, and the optional voice assistant (LLM streaming, TTS providers, playback, notifications).
 
 ## Ownership
 
@@ -14,9 +14,10 @@ Owns every module in this folder. Tests live in the sibling `../tests/` and are 
 - `daemon.Engine` is the single dictation state machine. IPC commands are `status`, `ping`, `start`, `stop`, `toggle`, `cancel`, `paste-last`, `reload`, `quit`, and the `assistant-*` variants; unknown commands return an error response instead of raising.
 - `assistant.Assistant` states are `idle`, `starting`, `listening`, `transcribing`, `thinking`, and `speaking`. `toggle` means start from idle, finish from listening, and interrupt/cancel from any busy state.
 - `config.Config` is a JSON-backed dataclass. New fields need a default, validation in `Config.validate()`, typed handling in `dictate config set`, documentation in both READMEs, and tests.
-- API keys never enter `config.Config`. `secrets.resolve()` checks the configured environment variable first, then `$XDG_CONFIG_HOME/dictate-unlimited/secrets.json` (mode `0600`). Key values are never printed or logged.
-- `asr.py` invokes whisper.cpp `parakeet-cli` with `-ng` and no GPU environment. Keep it CPU-only and preserve transcript cleanup and error reporting.
-- `insertion.py` prefers `wtype`, may fall back to the clipboard, never sends Enter, and never retries a write that may already have been delivered.
+- API keys never enter `config.Config`. `secrets.resolve()` checks the configured environment variable first, then `$XDG_CONFIG_HOME/speech-flow/secrets.json` (mode `0600`). Key values are never printed or logged.
+- `asr.py` invokes whisper.cpp `parakeet-cli` with `-ng` and no GPU environment. Keep it CPU-only and preserve transcript cleanup and error reporting. Capability probes (`--help`, `--version`) use the same `LD_LIBRARY_PATH` setup as transcription so a relocated runtime still reports its flags.
+- `insertion.py` prefers `wtype`, may fall back to the clipboard, never sends Enter, never retries a write that may already have been delivered, and appends one trailing space after sentence-ending punctuation when `trailing_space` is enabled.
+- `corrections.py` owns the literal dictionary, its JSON store, and the `dictate dictionary chat` terminal editor. Chat changes reload a running daemon automatically.
 - `assistant.SpeechPipeline` consumes the LLM token stream, splits complete sentences, synthesizes with bounded parallelism and prefetch, and plays in order. Preserve ordered playback and backpressure.
 - `tts.TTSClient` isolates two request shapes: `openai` (`POST /v1/audio/speech`) and `mimo` (`POST /v1/chat/completions` with Base64 audio at `choices[0].message.audio.data`). Provider differences stay in `tts.py`.
 - `llm.LLMClient` targets OpenAI-compatible `POST /v1/chat/completions` with SSE streaming, filters think tags, supports cancellation, and can start a configured local server.
@@ -35,7 +36,7 @@ Owns every module in this folder. Tests live in the sibling `../tests/` and are 
 ## Verification
 
 ```sh
-python3 -m py_compile linux/dictate_unlimited/*.py
+python3 -m py_compile linux/ASR/*.py
 PYTHONPATH=linux python3 -m unittest discover -s linux/tests
 ./linux/dictate doctor
 ./linux/dictate assistant doctor   # assistant/LLM/TTS paths

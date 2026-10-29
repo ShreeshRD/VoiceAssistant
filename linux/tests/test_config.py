@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dictate_unlimited import config as config_module
+from ASR import config as config_module
 
 
 class ConfigTests(unittest.TestCase):
@@ -15,6 +15,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.model, "bark-3.0")
         self.assertEqual(config.asr_bin, "")
         self.assertEqual(config_module.effective_threads(config), 4)
+        self.assertTrue(config.trailing_space)
 
     def test_set_value_types(self) -> None:
         config = config_module.Config()
@@ -26,6 +27,8 @@ class ConfigTests(unittest.TestCase):
         self.assertAlmostEqual(config.silence_rms, 0.02)
         config = config_module.set_value(config, "asr_bin", "/opt/parakeet-cli")
         self.assertEqual(config.asr_bin, "/opt/parakeet-cli")
+        config = config_module.set_value(config, "trailing_space", "false")
+        self.assertFalse(config.trailing_space)
 
     def test_invalid_values(self) -> None:
         config = config_module.Config()
@@ -35,6 +38,8 @@ class ConfigTests(unittest.TestCase):
             config_module.set_value(config, "insertion", "magic")
         with self.assertRaises(config_module.ConfigError):
             config_module.set_value(config, "unknown", "1")
+        with self.assertRaises(config_module.ConfigError):
+            config_module.Config(trailing_space="yes").validate()
 
     def test_roundtrip_ignores_unknown_keys(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

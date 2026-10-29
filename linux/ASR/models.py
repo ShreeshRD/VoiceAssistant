@@ -18,7 +18,7 @@ from . import paths
 
 CATALOG_PATH = Path(__file__).resolve().parent.parent / "models.json"
 CHUNK = 1024 * 1024
-USER_AGENT = "dictate-unlimited-linux/1.1 (+https://github.com/DanielJD1216/dictate-unlimited)"
+USER_AGENT = "speech-flow-linux/1.1 (+https://github.com/ShreeshRD/VoiceAssistant)"
 
 
 class ModelError(RuntimeError):

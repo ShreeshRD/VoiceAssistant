@@ -11,6 +11,7 @@ Owns `build-asr-linux.sh` and `convert-bark-to-ggml.py`.
 ## Local Contracts
 
 - `build-asr-linux.sh` clones whisper.cpp at tag `v1.9.5` by default and builds `parakeet-cli` with `GGML_CUDA`, `GGML_VULKAN`, `GGML_METAL`, `GGML_HIP`, and `GGML_SYCL` all `OFF`. Do not enable a GPU backend or remove the CPU-only checks.
+- Keep `CMAKE_BUILD_RPATH_USE_ORIGIN=ON` so `parakeet-cli` finds its `libparakeet`/`libggml` siblings through `$ORIGIN`; the built binary must stay relocatable.
 - The build output stays under `linux/.dependencies/`, which is gitignored. Do not vendor the whisper.cpp checkout or its binaries.
 - `convert-bark-to-ggml.py` never downloads weights. It reads the verified source directory produced by `dictate models download bark-3.0`.
 - The converter pins the decoded-state SHA-256, the 721 tensor names, and the expected hyperparameters. A mismatch must abort; never loosen verification to make a conversion succeed.

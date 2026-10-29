@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
-from dictate_unlimited import (
+from ASR import (
     assistant as assistant_module,
     audio,
     config as config_module,
@@ -339,7 +339,7 @@ class SecretsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": directory}):
                 secrets.set_value("tts_api_key", "abc123")
-                path = Path(directory) / "dictate-unlimited" / "secrets.json"
+                path = Path(directory) / "speech-flow" / "secrets.json"
                 self.assertTrue(path.is_file())
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
                 self.assertEqual(secrets.load()["tts_api_key"], "abc123")

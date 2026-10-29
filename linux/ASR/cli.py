@@ -41,7 +41,7 @@ def _parent() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         default=argparse.SUPPRESS,
-        help="configuration file (default: $XDG_CONFIG_HOME/dictate-unlimited/config.json)",
+        help="configuration file (default: $XDG_CONFIG_HOME/speech-flow/config.json)",
     )
     return parent
 
@@ -53,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="CPU-only local dictation for Linux (PipeWire + Bark 3.0 + Wayland).",
         parents=[common],
     )
-    parser.add_argument("--version", action="version", version=f"dictate-unlimited {__version__}")
+    parser.add_argument("--version", action="version", version=f"speech-flow {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     daemon_parser = sub.add_parser("daemon", parents=[common], help="run the dictation daemon")
@@ -114,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     dictionary_parser = sub.add_parser("dictionary", parents=[common], help="manage local corrections")
     dictionary_sub = dictionary_parser.add_subparsers(dest="dictionary_command")
+    dictionary_sub.add_parser("chat", parents=[common], help="add and remove corrections in a terminal chat")
     dictionary_sub.add_parser("list", parents=[common], help="list corrections")
     add = dictionary_sub.add_parser("add", parents=[common], help="add a correction")
     add.add_argument("heard")
@@ -267,7 +268,7 @@ def _status_watch(config: config_module.Config) -> int:
                 time.sleep(0.5)
                 continue
             print("\033[2J\033[H", end="")
-            print(f"Dictate Unlimited · {response.get('state')}")
+            print(f"Speech Flow · {response.get('state')}")
             print(str(response.get("message", "")))
             data = response.get("data", {})
             print(
@@ -553,9 +554,23 @@ def _cmd_dictionary(args: argparse.Namespace) -> int:
         print(f"dictionary error: {store.load_error}", file=sys.stderr)
         return 1
     try:
+        if command == "chat":
+            def reload_daemon() -> str | None:
+                try:
+                    response = ipc.request("reload", timeout=5, autostart=False)
+                except ipc.IPCError:
+                    return "daemon not running; corrections apply when it starts"
+                if response.get("ok"):
+                    return "updated the running daemon"
+                return f"daemon reload failed: {response.get('message')}"
+
+            return corrections.run_chat(store, reload_fn=reload_daemon)
         if command == "list":
             if not store.entries:
-                print("No corrections. Add one with: dictate dictionary add \"heard\" \"replacement\"")
+                print(
+                    "No corrections. Add one with: dictate dictionary chat "
+                    '(or dictate dictionary add "heard" "replacement")'
+                )
                 return 0
             for entry in store.entries:
                 print(f"{entry.id}  {entry.heard!r} -> {entry.replacement!r}")
@@ -824,7 +839,7 @@ def _dictate_command() -> str:
 def hyprland_block(hold: bool = False, assistant: bool = False) -> str:
     command = _dictate_command()
     lines = [
-        "# >>> dictate-unlimited >>>",
+        "# >>> speech-flow >>>",
         "# CPU-only PipeWire + Bark 3.0 dictation; optional voice assistant. Reload: hyprctl reload",
         f"exec-once = {command} daemon --detach",
     ]
@@ -851,8 +866,27 @@ def hyprland_block(hold: bool = False, assistant: bool = False) -> str:
                 f"bind = SUPER, A, exec, {command} assistant toggle",
             ]
         )
-    lines.append("# <<< dictate-unlimited <<<")
+    lines.append("# <<< speech-flow <<<")
     return "\n".join(lines)
+
+
+def replace_hyprland_block(current: str, block: str) -> str:
+    """Replace the generated block, migrating the legacy marker name."""
+    for legacy_start, legacy_end in (
+        ("# >>> dictate-unlimited >>>", "# <<< dictate-unlimited <<<"),
+    ):
+        if legacy_start in current and legacy_end in current:
+            before, rest = current.split(legacy_start, 1)
+            _, after = rest.split(legacy_end, 1)
+            current = before + after
+
+    start = "# >>> speech-flow >>>"
+    end = "# <<< speech-flow <<<"
+    if start in current and end in current:
+        before, rest = current.split(start, 1)
+        _, after = rest.split(end, 1)
+        return before + block + after
+    return current.rstrip() + "\n\n" + block + "\n"
 
 
 def _install_hyprland(hold: bool, yes: bool, assistant: bool = False) -> int:
@@ -862,14 +896,7 @@ def _install_hyprland(hold: bool, yes: bool, assistant: bool = False) -> int:
         print(f"Hyprland config not found: {path}", file=sys.stderr)
         return 1
     current = path.read_text(encoding="utf-8")
-    start = "# >>> dictate-unlimited >>>"
-    end = "# <<< dictate-unlimited <<<"
-    if start in current and end in current:
-        before, rest = current.split(start, 1)
-        _, after = rest.split(end, 1)
-        updated = before + block + after
-    else:
-        updated = current.rstrip() + "\n\n" + block + "\n"
+    updated = replace_hyprland_block(current, block)
     if not _confirm(f"Update {path} with the dictation keybinds?", yes):
         print(block)
         return 0
@@ -894,7 +921,7 @@ def _cmd_setup(args: argparse.Namespace) -> int:
     config = _load_config(args)
     if config is None:
         return 1
-    print(f"Dictate Unlimited {__version__} · CPU-only Linux setup\n")
+    print(f"Speech Flow {__version__} · CPU-only Linux setup\n")
 
     missing = [name for name in ("pw-cat",) if shutil.which(name) is None]
     if not shutil.which("wtype") and not shutil.which("wl-copy"):
@@ -964,7 +991,7 @@ def _cmd_setup(args: argparse.Namespace) -> int:
     print("  exec-once in Hyprland (included above)")
     print("\nThen press Super+D to dictate, Super+Shift+V to paste the last result.")
     if args.assistant:
-        print("Press Super+A to talk to the assistant; Super+Shift+A interrupts it.")
+        print("Press Super+A to talk to the assistant; press it again to finish or interrupt.")
         print("Check the assistant with: dictate assistant doctor")
         print("Configure TTS with: dictate config set tts_base_url <url>, then")
         print("  dictate secrets set tts_api_key")

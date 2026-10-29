@@ -36,7 +36,22 @@ def have(command: str) -> bool:
 def sanitize_for_typing(text: str) -> str:
     # wtype maps newlines to Return; that can submit a chat composer. Dictation
     # is single-line text, so flatten line breaks rather than sending Enter.
-    return re.sub(r"\s+", " ", text.replace("\x00", "")).strip()
+    payload = re.sub(r"\s+", " ", text.replace("\x00", "")).strip()
+    # Keep a deliberately added trailing space (see with_trailing_space) so
+    # back-to-back dictations do not run together in the focused field.
+    if payload and text[-1:].isspace():
+        payload += " "
+    return payload
+
+
+_SENTENCE_END = re.compile(r"[.!?…](?:[\"'”’\)\]]*)$")
+
+
+def with_trailing_space(text: str) -> str:
+    """Append one space when text ends with sentence-ending punctuation."""
+    if text and _SENTENCE_END.search(text):
+        return text + " "
+    return text
 
 
 def _run(command: list[str], *, input_text: str | None = None, timeout: float = 20) -> subprocess.CompletedProcess[str]:
@@ -149,6 +164,8 @@ def deliver(text: str, config: config_module.Config) -> DeliveryResult:
     text = text.strip("\n")
     if not text.strip():
         return DeliveryResult(False, "none", "There is no text to insert.")
+    if config.trailing_space:
+        text = with_trailing_space(text)
     mode = config.insertion
     if mode == "none":
         return DeliveryResult(True, "none", "Transcript ready; insertion is disabled.")

@@ -6,7 +6,7 @@ Standard-library `unittest` coverage for the Linux port: ASR parsing, audio help
 
 ## Ownership
 
-Owns every `test_*.py` file in this folder. Production code lives in `../dictate_unlimited/`.
+Owns every `test_*.py` file in this folder. Production code lives in `../ASR/`.
 
 ## Local Contracts
 
@@ -32,7 +32,7 @@ Owns every `test_*.py` file in this folder. Production code lives in `../dictate
 PYTHONPATH=linux python3 -m unittest discover -s linux/tests
 ```
 
-Current baseline: 88 tests, all passing on Python 3.14 (and intended to remain compatible with 3.11+).
+Current baseline: 102 tests, all passing on Python 3.14 (and intended to remain compatible with 3.11+).
 
 ## Child DOX Index
 

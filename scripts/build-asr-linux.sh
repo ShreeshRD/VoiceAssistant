@@ -41,6 +41,7 @@ fi
 echo "Configuring CPU-only build (CUDA, Vulkan, HIP, SYCL and Metal disabled) ..."
 cmake -S "$DEST" -B "$DEST/build" \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
   -DGGML_CUDA=OFF \
   -DGGML_VULKAN=OFF \
   -DGGML_METAL=OFF \

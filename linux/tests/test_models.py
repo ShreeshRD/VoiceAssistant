@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dictate_unlimited import config as config_module
-from dictate_unlimited import models
+from ASR import config as config_module
+from ASR import models
 
 
 class CatalogTests(unittest.TestCase):

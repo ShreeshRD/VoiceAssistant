@@ -78,6 +78,7 @@ class Config:
     # Delivery
     insertion: str = "auto"
     restore_clipboard: bool = True
+    trailing_space: bool = True
 
     # Runtime
     notifications: bool = True
@@ -131,6 +132,8 @@ class Config:
             raise ConfigError("silence_rms must be between 0 and 1")
         if self.insertion not in INSERTION_MODES:
             raise ConfigError(f"insertion must be one of {', '.join(INSERTION_MODES)}")
+        if not isinstance(self.trailing_space, bool):
+            raise ConfigError("trailing_space must be true or false")
         if self.log_level.upper() not in LOG_LEVELS:
             raise ConfigError(f"log_level must be one of {', '.join(LOG_LEVELS)}")
         self.log_level = self.log_level.upper()

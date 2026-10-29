@@ -1,4 +1,4 @@
-# Dictate Unlimited for Linux (CPU-only)
+# Speech Flow for Linux (CPU-only)
 
 Free, local voice dictation on Linux. PipeWire capture, Bark 3.0 recognition
 through whisper.cpp's `parakeet-cli`, a small background daemon, and Wayland
@@ -25,7 +25,7 @@ source .venv/bin/activate
 pip install numpy constriction
 
 ./scripts/build-asr-linux.sh          # CPU-only parakeet-cli (whisper.cpp v1.9.5)
-./linux/install.sh                    # symlink ~/.local/bin/dictate
+./linux/install.sh                    # runtime to ~/.local/share/speech-flow/app
 ./linux/dictate models download bark-3.0 --use
 deactivate
 ./linux/dictate doctor
@@ -36,10 +36,16 @@ packages must go in a virtual environment (or an existing pyenv environment).
 NumPy and constriction are only used while converting the downloaded Bark
 weights; the daemon and CLI use only the Python standard library at runtime.
 
-`install.sh` also accepts `--build-asr`, `--download-model ID`, `--hyprland`,
-`--hold`, `--assistant`, `--yes`, and `--force`. It creates the default config on
-first run and installs the Waybar helper `dictate-assistant-waybar` alongside
-the `dictate` launcher.
+`install.sh` copies a self-contained runtime to
+`~/.local/share/speech-flow/app` and links `dictate` and the Waybar helper into
+`~/.local/bin`. The installed daemon and `parakeet-cli` do not reference the
+checkout, so the repository can be moved or removed after installation. Re-run
+`install.sh` after updating the code or rebuilding the ASR runtime.
+
+`install.sh` also accepts `--build-asr`, `--download-model ID`, `--prefix DIR`,
+`--hyprland`, `--hold`, `--assistant`, `--yes`, and `--force`. It creates the
+default config on first run and never edits your compositor configuration unless
+you pass `--hyprland`.
 
 ## Hyprland shortcuts
 
@@ -101,6 +107,7 @@ dictate models import ~/Downloads/custom-ggml.bin
 dictate models remove bark-3.0
 
 dictate dictionary list
+dictate dictionary chat
 dictate dictionary add "heard phrase" "replacement"
 dictate dictionary remove <id>
 ```
@@ -155,7 +162,7 @@ dictate assistant warmup
 The LLM endpoint only needs to implement `POST /v1/chat/completions` with
 streaming. If the endpoint is local and `llm_start_command` is set, the daemon
 starts it on demand and logs it to
-`$XDG_STATE_HOME/dictate-unlimited/llm-server.log`.
+`$XDG_STATE_HOME/speech-flow/llm-server.log`.
 
 TTS has two request shapes. `tts_provider = "mimo"` posts to
 `POST /v1/chat/completions` and reads Base64 audio from the response, which is
@@ -166,7 +173,7 @@ instead, and `none` keeps replies text-only.
 
 API keys never go in `config.json`. The daemon checks the environment variable
 named by `tts_api_key_env` (default `DICTATE_TTS_API_KEY`, with `MIMO_API_KEY`
-as an alias), then `~/.config/dictate-unlimited/secrets.json` (mode `0600`,
+as an alias), then `~/.config/speech-flow/secrets.json` (mode `0600`,
 written by `dictate secrets set`).
 
 With `SUPER + A`:
@@ -225,12 +232,12 @@ Bark 3.0 is published as `model.bark` plus a NumPy loader, not as GGML.
 (about 167 MB total), checking each file's exact size and SHA-256, then runs
 `scripts/convert-bark-to-ggml.py` locally to write a `bark-3.0-ggml-f16.bin`
 (about 1.2 GB). Sources are kept under
-`$XDG_DATA_HOME/dictate-unlimited/models/sources/bark-3.0/`.
+`$XDG_DATA_HOME/speech-flow/models/sources/bark-3.0/`.
 
 ## Configuration
 
-The config is JSON at `$XDG_CONFIG_HOME/dictate-unlimited/config.json`
-(normally `~/.config/dictate-unlimited/config.json`). `dictate config set`
+The config is JSON at `$XDG_CONFIG_HOME/speech-flow/config.json`
+(normally `~/.config/speech-flow/config.json`). `dictate config set`
 validates and writes it atomically with mode `0600`; `dictate reload` applies
 changes to a running daemon.
 
@@ -244,6 +251,7 @@ changes to a running daemon.
 | `models_dir` | `""` | override model directory |
 | `audio_source` | `""` | PipeWire source name; empty means system default |
 | `insertion` | `auto` | `auto`, `wtype`, `clipboard`, `copy`, `none` |
+| `trailing_space` | `true` | add a space when text ends with `.`, `?`, `!`, or `…` |
 | `notifications` | `true` | desktop notifications |
 | `auto_start_daemon` | `true` | start the daemon from a hotkey if needed |
 | `assistant_max_seconds` | `120` | assistant recording limit in seconds (5–600) |
@@ -290,6 +298,10 @@ assistant start cleans up files left by a crash.
 PYTHONPATH=linux python3 -m unittest discover -s linux/tests
 ./linux/dictate doctor
 ```
+
+`./linux/dictate` runs from the checkout; `dictate` runs the installed copy in
+`~/.local/share/speech-flow/app`. Re-run `./linux/install.sh` after changing
+code that the installed daemon should use.
 
 See [`linux/README.md`](linux/README.md) for the full port documentation,
 including insertion modes, the systemd user service, and limitations.

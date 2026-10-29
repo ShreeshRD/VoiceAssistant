@@ -14,30 +14,35 @@ a separate manual run exercised Bonsai, MiMo TTS, `mpv`, and notifications.
 PYTHONPATH=linux python3 -m unittest discover -s linux/tests
 ```
 
-88 tests, all passing:
+102 tests, all passing:
 
 | File | Tests | Covers |
 | --- | ---: | --- |
-| `tests/test_asr.py` | 3 | configured binary, stdout transcript, stderr error path |
+| `tests/test_asr.py` | 4 | configured binary, stdout transcript, stderr error path, capability probe environment |
 | `tests/test_asr_parse.py` | 8 | parakeet transcript cleanup, special tokens, CPU flags |
 | `tests/test_assistant.py` | 25 | sentence splitting, think-tag filtering, LLM/TTS clients, secrets, speech pipeline, full simulated turn |
 | `tests/test_audio.py` | 8 | PCM statistics, WAV stats, capture lifecycle |
 | `tests/test_config.py` | 7 | defaults, validation, typed `config set`, legacy-key migration |
-| `tests/test_corrections.py` | 16 | ordering, matching, add/remove/clear, persistence |
+| `tests/test_corrections.py` | 22 | ordering, matching, add/remove/clear, persistence, chat |
 | `tests/test_daemon.py` | 6 | state machine, cancellation, delivery, shutdown |
-| `tests/test_hyprland.py` | 3 | generated tap/hold blocks |
-| `tests/test_insertion.py` | 4 | sanitization, mode fallbacks |
+| `tests/test_hyprland.py` | 5 | generated tap/hold blocks, legacy marker migration |
+| `tests/test_insertion.py` | 9 | sanitization, mode fallbacks, trailing space |
 | `tests/test_ipc.py` | 2 | socket request/response and error paths |
 | `tests/test_models.py` | 6 | catalog rules, source verification, path resolution |
 
 ## Environment check
 
 ```sh
-./linux/dictate doctor
+dictate doctor
 ```
 
-Result: 21 checks, 0 failures, 1 warning (daemon intentionally stopped). The
-check confirmed:
+The installed runtime lives in `~/.local/share/speech-flow/app`; `dictate` and
+`dictate-assistant-waybar` in `~/.local/bin` are symlinks into it. `doctor`
+reports the ASR binary and `-ng` capability from that copy, and dictation keeps
+working after the checkout is moved.
+
+Result: 24 checks, 0 failures, 0 warnings with the daemon running and the
+optional assistant LLM/TTS endpoints configured. The check confirmed:
 
 - Python 3.14.8, PipeWire, `pactl`, `wtype`, `wl-clipboard`, `notify-send`.
 - 6 PipeWire sources with a default input.

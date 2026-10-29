@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Waybar custom module for the Dictate Unlimited voice assistant.
+"""Waybar custom module for the Speech Flow voice assistant.
 
 Prints one JSON object per invocation.  Configure it with ``"exec"`` and a short
 ``"interval"`` (200-500 ms while active; 1-2 s when idle):

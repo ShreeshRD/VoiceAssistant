@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from dictate_unlimited.asr import parse_transcript
+from ASR.asr import parse_transcript
 
 
 class ParseTranscriptTests(unittest.TestCase):

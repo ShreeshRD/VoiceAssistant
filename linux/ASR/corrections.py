@@ -16,7 +16,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 MAXIMUM_TERM_LENGTH = 120
 
@@ -219,3 +219,141 @@ class CorrectionStore:
 
     def apply(self, text: str) -> str:
         return apply(text, self.entries)
+
+
+CHAT_HELP = """\
+Add:      m. d. => MD            (also -> or "add m. d. => MD")
+Remove:   remove 2               (number from list)
+          remove 4f3a            (unique id prefix)
+Preview:  apply m. d. files
+Other:    list, undo, reload, help, quit
+"""
+
+_CHAT_SEPARATORS = ("=>", "->", "→")
+
+
+def _unquote(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1].strip()
+    return value
+
+
+def _parse_pair(line: str) -> tuple[str, str] | None:
+    for separator in _CHAT_SEPARATORS:
+        if separator in line:
+            heard, replacement = line.split(separator, 1)
+            return _unquote(heard), _unquote(replacement)
+    return None
+
+
+def _resolve_entry(entries: Iterable[Correction], target: str) -> Correction | None:
+    items = list(entries)
+    if target.isdigit():
+        index = int(target) - 1
+        return items[index] if 0 <= index < len(items) else None
+    for entry in items:
+        if entry.id == target:
+            return entry
+    matches = [entry for entry in items if entry.id.startswith(target)]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _print_entries(entries: Iterable[Correction], output: Callable[[str], None]) -> None:
+    items = list(entries)
+    if not items:
+        output("No corrections yet. Add one with: heard => replacement")
+        return
+    for index, entry in enumerate(items, 1):
+        output(f"{index:>2}. {entry.heard!r} -> {entry.replacement!r}  [{entry.id}]")
+
+
+def run_chat(
+    store: CorrectionStore,
+    *,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+    reload_fn: Callable[[], str | None] | None = None,
+) -> int:
+    """Interactive terminal editor for the correction dictionary."""
+    if store.load_error:
+        output_fn(f"dictionary error: {store.load_error}")
+        return 1
+    output_fn("Correction chat. Changes are saved immediately and applied literally.")
+    output_fn(CHAT_HELP.strip())
+    _print_entries(store.entries, output_fn)
+    last_added: Correction | None = None
+
+    def announce_reload() -> None:
+        if reload_fn is None:
+            return
+        message = reload_fn()
+        if message:
+            output_fn(message)
+
+    while True:
+        try:
+            line = input_fn("correction> ")
+        except (EOFError, KeyboardInterrupt):
+            output_fn("")
+            return 0
+        line = line.strip()
+        if not line:
+            continue
+        lowered = line.casefold()
+        if lowered in ("quit", "exit", "q"):
+            return 0
+        if lowered in ("help", "?", "h"):
+            output_fn(CHAT_HELP.strip())
+            continue
+        if lowered in ("list", "ls", "l"):
+            _print_entries(store.entries, output_fn)
+            continue
+        if lowered == "undo":
+            if last_added is None or store.find(last_added.id) is None:
+                output_fn("Nothing to undo in this session.")
+                continue
+            store.remove(last_added.id)
+            last_added = None
+            output_fn("removed the last added correction")
+            announce_reload()
+            continue
+        if lowered == "reload":
+            store.load()
+            if store.load_error:
+                output_fn(f"dictionary error: {store.load_error}")
+            else:
+                output_fn("reloaded from disk")
+                _print_entries(store.entries, output_fn)
+            continue
+        target: str | None = None
+        for prefix in ("remove ", "rm ", "delete ", "del "):
+            if lowered.startswith(prefix):
+                target = line[len(prefix) :].strip()
+                break
+        if target is not None:
+            entry = _resolve_entry(store.entries, target)
+            if entry is None:
+                output_fn(f"no correction matches {target!r}; use list to see numbers and ids")
+                continue
+            store.remove(entry.id)
+            output_fn(f"removed {entry.heard!r} -> {entry.replacement!r}")
+            announce_reload()
+            continue
+        if lowered.startswith(("apply ", "test ")):
+            output_fn(store.apply(line.split(None, 1)[1]))
+            continue
+        if lowered.startswith("add "):
+            line = line.split(None, 1)[1]
+        pair = _parse_pair(line)
+        if pair is None:
+            output_fn('Type "heard => replacement", or "help" for commands.')
+            continue
+        try:
+            entry = store.add(*pair)
+        except CorrectionError as exc:
+            output_fn(str(exc))
+            continue
+        last_added = entry
+        output_fn(f"added {entry.heard!r} -> {entry.replacement!r}  [{entry.id}]")
+        announce_reload()

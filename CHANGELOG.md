@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- `dictate dictionary chat` is an interactive terminal editor for corrections:
+  add with `heard => replacement`, list, remove by number or id prefix, undo, and
+  preview with `apply`. A running daemon is reloaded after each change.
+- New `trailing_space` setting (default `true`) appends one space when a
+  transcript ends with sentence punctuation, so the next dictation does not run
+  into the previous full stop.
+- Renamed the Python runtime package from `linux/dictate_unlimited` to
+  `linux/ASR`; imports now use `from ASR import ...`.
+- `install.sh` now copies a self-contained runtime to
+  `~/.local/share/speech-flow/app` (override with `--prefix` or
+  `DICTATE_INSTALL_ROOT`) and links the launchers from `~/.local/bin`, so the
+  checkout can be moved or deleted without breaking dictation.
+- `parakeet-cli` is built with a relocatable `$ORIGIN` runpath, and the
+  capability probe passes the same library path as transcription, so moving
+  the runtime no longer hides the `-ng` flag.
+- Renamed the product and runtime identifiers from `dictate-unlimited` to
+  `speech-flow`: config, state, data, socket, PID, log, notification group,
+  systemd unit, and the generated Hyprland markers. The `dictate` command and
+  the `dictate-assistant-waybar` helper keep their names. Existing Hyprland
+  blocks with the old markers are replaced in place.
+
 ## 1.2.0-linux.1 · Voice assistant
 
 - Optional voice assistant inside the existing daemon: tap to listen, tap again

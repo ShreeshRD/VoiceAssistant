@@ -1,6 +1,6 @@
 # Third-party notices
 
-Original Dictate Unlimited code and the Linux port under `linux/` are MIT,
+Original Speech Flow code and the Linux port under `linux/` are MIT,
 copyright 2026 DOO MADE. Third-party components and model weights retain their
 own licences.
 

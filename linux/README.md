@@ -1,4 +1,4 @@
-# Dictate Unlimited for Linux (CPU-only)
+# Speech Flow for Linux (CPU-only)
 
 This directory is a native Linux port: PipeWire capture, Bark 3.0 recognition
 through whisper.cpp's `parakeet-cli`, a small background daemon, and Wayland
@@ -50,15 +50,15 @@ weights. The daemon and CLI use only the Python standard library at runtime.
 ## Install
 
 ```sh
-git clone https://github.com/DanielJD1216/dictate-unlimited.git
-cd dictate-unlimited
+git clone https://github.com/ShreeshRD/VoiceAssistant.git
+cd VoiceAssistant
 
 python3 -m venv .venv                 # conversion-only dependencies
 source .venv/bin/activate
 pip install numpy constriction
 
 ./scripts/build-asr-linux.sh          # CPU-only parakeet-cli (whisper.cpp v1.9.5)
-./linux/install.sh                    # symlink ~/.local/bin/dictate
+./linux/install.sh                    # runtime to ~/.local/share/speech-flow/app
 ./linux/dictate models download bark-3.0 --use
 deactivate
 ./linux/dictate doctor
@@ -67,14 +67,20 @@ deactivate
 If you already have a pyenv or virtual environment with NumPy and constriction
 (for example, `pyenv shell voice`), activate that instead of creating `.venv`.
 
+`install.sh` copies a self-contained runtime to
+`~/.local/share/speech-flow/app` and links `dictate` and the Waybar helper into
+`~/.local/bin`. The installed daemon and `parakeet-cli` do not reference the
+checkout, so the repository can be moved or removed after installation. Re-run
+`install.sh` after updating the code or rebuilding the ASR runtime. Use
+`--prefix DIR` (or `DICTATE_INSTALL_ROOT`) to choose another location.
+
 `install.sh` also accepts `--build-asr`, `--download-model ID`, `--hyprland`,
 `--hold`, `--assistant`, `--yes`, and `--force`. It creates the default config on
-first run, installs `dictate` and the Waybar helper
-`dictate-assistant-waybar` into `~/.local/bin`, and never edits your compositor
-configuration unless you pass `--hyprland`. `--assistant` only adds the
-`SUPER + A` bind and must be combined with `--hyprland`. If `SUPER + A` is
-already used in your Hyprland config, comment that bind out first; Hyprland
-keeps the first matching bind, so the assistant would otherwise never fire.
+first run and never edits your compositor configuration unless you pass
+`--hyprland`. `--assistant` only adds the `SUPER + A` bind and must be combined
+with `--hyprland`. If `SUPER + A` is already used in your Hyprland config,
+comment that bind out first; Hyprland keeps the first matching bind, so the
+assistant would otherwise never fire.
 
 The build script clones whisper.cpp at tag `v1.9.5`, configures CMake with
 `GGML_CUDA`, `GGML_VULKAN`, `GGML_METAL`, `GGML_HIP`, and `GGML_SYCL` all off,
@@ -92,8 +98,8 @@ dictate setup --hyprland --hold   # press to start, release to finish
 dictate setup --hyprland --assistant  # also bind SUPER + A
 ```
 
-The command writes a marked block between `# >>> dictate-unlimited >>>` and
-`# <<< dictate-unlimited <<<`, keeps a timestamped backup, and asks before
+The command writes a marked block between `# >>> speech-flow >>>` and
+`# <<< speech-flow <<<`, keeps a timestamped backup, and asks before
 writing when run interactively. Then reload Hyprland:
 
 ```sh
@@ -176,11 +182,20 @@ dictate models remove bark-3.0
 dictate models path bark-3.0
 
 dictate dictionary list
+dictate dictionary chat
 dictate dictionary add "heard phrase" "replacement"
 dictate dictionary remove <id>
 dictate dictionary clear
 dictate dictionary apply "some text"
 ```
+
+`dictate dictionary chat` is a small terminal editor: type `heard => replacement`
+(or `heard -> replacement`) to add a correction, `list` to see numbers and ids,
+`remove 2` or `remove <id-prefix>` to delete one, `undo` to drop the last addition
+from this session, and `apply <text>` to preview the result. Each change is saved
+immediately and a running daemon is reloaded automatically. The dictionary is
+literal, case-insensitive, and never learns on its own; for example
+`m. d. => MD` turns "open the m. d. file" into "open the MD file".
 
 Configuration and diagnostics:
 
@@ -234,7 +249,7 @@ dictate config set llm_start_cwd /path/to/Bonsai-demo
 
 When `llm_start_command` is set and the endpoint is local but unreachable, the
 daemon runs the command with `llm_start_cwd`, logs stdout/stderr to
-`$XDG_STATE_HOME/dictate-unlimited/llm-server.log`, and waits up to `llm_start_timeout`
+`$XDG_STATE_HOME/speech-flow/llm-server.log`, and waits up to `llm_start_timeout`
 seconds for `/models`. A remote endpoint must already be running.
 
 Phase 1 TTS is Xiaomi MiMo's voice service. It is an OpenAI-compatible chat
@@ -280,7 +295,7 @@ player it will use.
 
 API keys are never stored in `config.json`. Resolution order is the environment
 variable named by `tts_api_key_env`/`llm_api_key_env`, then
-`~/.config/dictate-unlimited/secrets.json` (mode `0600`). `MIMO_API_KEY` is also
+`~/.config/speech-flow/secrets.json` (mode `0600`). `MIMO_API_KEY` is also
 accepted as an alias for the TTS key. `dictate secrets list` reports only the
 source, never the value.
 
@@ -343,7 +358,7 @@ Bark 3.0 is published as `model.bark` plus a NumPy loader, not as GGML.
 3. Verifies the converted file's exact size and moves it into the models
    directory.
 
-Sources are kept under `$XDG_DATA_HOME/dictate-unlimited/models/sources/bark-3.0/`
+Sources are kept under `$XDG_DATA_HOME/speech-flow/models/sources/bark-3.0/`
 so the model can be re-verified or re-converted. `dictate models remove bark-3.0`
 deletes both the converted file and its sources.
 
@@ -358,8 +373,8 @@ into the models directory and selects it. Imported models are not hash-verified.
 
 ## Configuration
 
-The config is JSON at `$XDG_CONFIG_HOME/dictate-unlimited/config.json`
-(normally `~/.config/dictate-unlimited/config.json`). `dictate config set`
+The config is JSON at `$XDG_CONFIG_HOME/speech-flow/config.json`
+(normally `~/.config/speech-flow/config.json`). `dictate config set`
 validates and writes it atomically with mode `0600`; `dictate reload` applies
 changes to a running daemon.
 
@@ -375,6 +390,7 @@ changes to a running daemon.
 | `audio_source` | `""` | PipeWire source name; empty means system default |
 | `insertion` | `auto` | `auto`, `wtype`, `clipboard`, `copy`, `none` |
 | `restore_clipboard` | `true` | restore previous clipboard after a verified paste |
+| `trailing_space` | `true` | add a space when text ends with `.`, `?`, `!`, or `…` |
 | `notifications` | `true` | desktop notifications |
 | `auto_start_daemon` | `true` | start the daemon from a hotkey if needed |
 | `keep_audio` | `false` | keep temporary WAV files for debugging |
@@ -439,7 +455,10 @@ Whisper-era `model` value (for example `base` or `ggml-small.bin`) falls back to
   testing, or when another tool will read the daemon status.
 
 Line breaks are flattened before typing because `wtype` maps newlines to Return.
-Nothing in this port sends Enter.
+Nothing in this port sends Enter. When `trailing_space` is enabled (the default),
+a transcript that ends with `.`, `?`, `!`, or `…` gets one trailing space, so a
+following dictation starts with normal spacing instead of landing directly after
+the full stop. Set `dictate config set trailing_space false` to disable it.
 
 ## CPU-only guarantees
 
@@ -478,14 +497,15 @@ Persistent files:
 
 | Path | Contents |
 | --- | --- |
-| `~/.config/dictate-unlimited/config.json` | settings (mode 0600) |
-| `~/.config/dictate-unlimited/corrections.json` | dictionary entries |
-| `~/.config/dictate-unlimited/secrets.json` | assistant API keys (mode 0600, only if set) |
-| `~/.local/share/dictate-unlimited/models/` | converted GGML model and pinned sources |
-| `~/.local/state/dictate-unlimited/dictate-unlimited.log` | rotating log |
-| `~/.local/state/dictate-unlimited/llm-server.log` | local LLM server output, if autostarted |
-| `$XDG_RUNTIME_DIR/dictate-unlimited.sock` | local control socket |
-| `$XDG_RUNTIME_DIR/dictate-unlimited.pid` | daemon PID |
+| `~/.config/speech-flow/config.json` | settings (mode 0600) |
+| `~/.config/speech-flow/corrections.json` | dictionary entries |
+| `~/.config/speech-flow/secrets.json` | assistant API keys (mode 0600, only if set) |
+| `~/.local/share/speech-flow/models/` | converted GGML model and pinned sources |
+| `~/.local/share/speech-flow/app/` | installed runtime, including `parakeet-cli` and its libraries |
+| `~/.local/state/speech-flow/speech-flow.log` | rotating log |
+| `~/.local/state/speech-flow/llm-server.log` | local LLM server output, if autostarted |
+| `$XDG_RUNTIME_DIR/speech-flow.sock` | local control socket |
+| `$XDG_RUNTIME_DIR/speech-flow.pid` | daemon PID |
 
 Temporary TTS audio is written under the state directory with mode `0600` and
 removed after playback or cancellation. Files left by a crash are swept on the
@@ -498,9 +518,9 @@ provided for compositor-independent startup:
 
 ```sh
 mkdir -p ~/.config/systemd/user
-cp linux/systemd/dictate-unlimited.service ~/.config/systemd/user/
+cp ~/.local/share/speech-flow/app/linux/systemd/speech-flow.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now dictate-unlimited.service
+systemctl --user enable --now speech-flow.service
 ```
 
 The unit binds to `graphical-session.target`, passes the Wayland environment
@@ -543,6 +563,10 @@ PYTHONPATH=linux python3 -m unittest discover -s linux/tests
 
 The package is Python standard library only at runtime; the one-time converter
 also needs NumPy and constriction. Sources live in
-[`dictate_unlimited/`](dictate_unlimited/); tests live in [`tests/`](tests/).
+[`ASR/`](ASR/); tests live in [`tests/`](tests/).
+
+`./linux/dictate` runs from the checkout. `dictate` runs the installed copy in
+`~/.local/share/speech-flow/app`; re-run `./linux/install.sh` after changing code
+that the installed daemon should use.
 See the repository [third-party notices](../THIRD_PARTY_NOTICES.md) for Bark
 3.0, whisper.cpp, NumPy, and constriction licensing.

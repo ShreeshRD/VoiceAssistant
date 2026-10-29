@@ -1,6 +1,6 @@
 [Unit]
-Description=Dictate Unlimited (CPU-only Linux port)
-Documentation=https://github.com/DanielJD1216/dictate-unlimited/blob/main/linux/README.md
+Description=Speech Flow (CPU-only Linux port)
+Documentation=https://github.com/ShreeshRD/VoiceAssistant/blob/main/linux/README.md
 After=graphical-session.target pipewire.service wireplumber.service
 PartOf=graphical-session.target
 

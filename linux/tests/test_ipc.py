@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from dictate_unlimited import ipc, paths
+from ASR import ipc, paths
 
 
 class FakeEngine:

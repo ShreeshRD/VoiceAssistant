@@ -11,7 +11,7 @@ The responsiveness model is borrowed from the Jarvis prototype:
 
 ASR deliberately stays on the existing CPU-only Bark path.  The LLM can use the
 GPU; TTS runs remotely in phase 1 and can later be swapped for a local engine
-behind :class:`dictate_unlimited.tts.TTSClient`.
+behind :class:`ASR.tts.TTSClient`.
 """
 
 from __future__ import annotations

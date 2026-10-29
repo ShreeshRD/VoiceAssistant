@@ -5,11 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dictate_unlimited.corrections import (
+from ASR.corrections import (
     Correction,
     CorrectionError,
     CorrectionStore,
     apply,
+    run_chat,
     validate,
 )
 
@@ -113,6 +114,73 @@ class CorrectionStoreTests(unittest.TestCase):
         store.clear(force=True)
         self.assertEqual(store.entries, [])
         json.loads(self.path.read_text(encoding="utf-8"))
+
+class CorrectionChatTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.path = Path(self.directory.name) / "corrections.json"
+        self.store = CorrectionStore(self.path)
+
+    def tearDown(self) -> None:
+        self.directory.cleanup()
+
+    def chat(self, lines: list[str], reload_fn=None) -> tuple[int, list[str]]:
+        queue = list(lines)
+        output: list[str] = []
+
+        def fake_input(prompt: str = "") -> str:
+            if not queue:
+                raise EOFError
+            return queue.pop(0)
+
+        code = run_chat(
+            self.store,
+            input_fn=fake_input,
+            output_fn=output.append,
+            reload_fn=reload_fn,
+        )
+        return code, output
+
+    def test_add_through_chat_and_reload(self) -> None:
+        reloads: list[str] = []
+        code, output = self.chat(["m. d. => MD", "quit"], reload_fn=lambda: reloads.append("ok") or "reloaded")
+        self.assertEqual(code, 0)
+        self.assertEqual([entry.heard for entry in self.store.entries], ["m. d."])
+        self.assertEqual(self.store.apply("open the m. d. file"), "open the MD file")
+        self.assertTrue(any("added" in line for line in output))
+        self.assertEqual(reloads, ["ok"])
+
+    def test_alternate_separator_and_quotes(self) -> None:
+        code, _ = self.chat(['add "m. d." -> "MD"', "exit"])
+        self.assertEqual(code, 0)
+        self.assertEqual(self.store.entries[0].heard, "m. d.")
+        self.assertEqual(self.store.entries[0].replacement, "MD")
+
+    def test_list_remove_and_undo(self) -> None:
+        code, output = self.chat(
+            ["map => Mac", "cat => dog", "list", "remove 1", "undo", "list", "q"]
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(self.store.entries, [])
+        self.assertTrue(any(line.strip().startswith("1.") for line in output))
+
+    def test_apply_is_a_preview_only(self) -> None:
+        self.store.add("map", "Mac")
+        code, output = self.chat(["apply use a map", "quit"])
+        self.assertEqual(code, 0)
+        self.assertIn("use a Mac", output)
+        self.assertEqual(len(self.store.entries), 1)
+
+    def test_invalid_line_keeps_chat_open(self) -> None:
+        code, output = self.chat(["nonsense", "map => Mac", "quit"])
+        self.assertEqual(code, 0)
+        self.assertTrue(any("heard => replacement" in line for line in output))
+        self.assertEqual(len(self.store.entries), 1)
+
+    def test_eof_exits_cleanly(self) -> None:
+        code, output = self.chat([])
+        self.assertEqual(code, 0)
+        self.assertIn("", output)
 
 
 if __name__ == "__main__":

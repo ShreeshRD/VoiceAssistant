@@ -1,4 +1,4 @@
-# Dictate Unlimited (Linux CPU-only port)
+# Speech Flow (Linux CPU-only port)
 #
 # Add this block to ~/.config/hypr/hyprland.conf, or run:
 #   dictate setup --hyprland            # tap mode

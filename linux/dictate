@@ -8,6 +8,6 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from dictate_unlimited.cli import main
+from ASR.cli import main
 
 raise SystemExit(main())

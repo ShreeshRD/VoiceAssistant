@@ -55,6 +55,7 @@ class Capabilities:
         self.binary = binary
         self.version = ""
         self.help = ""
+        env = _cpu_environment(binary, os.cpu_count() or 1)
         try:
             help_result = subprocess.run(
                 [str(binary), "--help"],
@@ -62,6 +63,7 @@ class Capabilities:
                 text=True,
                 timeout=10,
                 check=False,
+                env=env,
             )
             self.help = help_result.stdout + help_result.stderr
         except (OSError, subprocess.TimeoutExpired):
@@ -74,6 +76,7 @@ class Capabilities:
                     text=True,
                     timeout=10,
                     check=False,
+                    env=env,
                 )
                 self.version = (version.stdout or version.stderr).strip()
             except (OSError, subprocess.TimeoutExpired):

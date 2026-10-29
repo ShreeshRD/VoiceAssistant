@@ -6,9 +6,9 @@ import time
 import unittest
 from pathlib import Path
 
-from dictate_unlimited import asr, audio, config as config_module, corrections
-from dictate_unlimited.daemon import Engine
-from dictate_unlimited.insertion import DeliveryResult
+from ASR import asr, audio, config as config_module, corrections
+from ASR.daemon import Engine
+from ASR.insertion import DeliveryResult
 
 
 class FakeCapture:

@@ -77,7 +77,7 @@ Default section order:
 
 ## Project
 
-Dictate Unlimited is a free, local, CPU-only dictation tool for Linux (Arch/Hyprland tested). PipeWire captures audio, Bark 3.0 runs through whisper.cpp's `parakeet-cli`, a Python daemon owns the state machine, and Wayland text insertion delivers the transcript. An optional voice assistant reuses the CPU recognizer, streams replies from an OpenAI-compatible LLM, and speaks them through a TTS endpoint.
+Speech Flow is a free, local, CPU-only dictation tool for Linux (Arch/Hyprland tested). PipeWire captures audio, Bark 3.0 runs through whisper.cpp's `parakeet-cli`, a Python daemon owns the state machine, and Wayland text insertion delivers the transcript. An optional voice assistant reuses the CPU recognizer, streams replies from an OpenAI-compatible LLM, and speaks them through a TTS endpoint.
 
 This checkout contains the Linux port and its build/conversion scripts. The historical macOS Swift application is not present here.
 
@@ -85,10 +85,11 @@ This checkout contains the Linux port and its build/conversion scripts. The hist
 
 - Dictation and its recognition path are CPU-only: never enable CUDA, Vulkan, HIP, SYCL, Metal, ROCm, or OpenCL backends for ASR.
 - The assistant is optional and off by default. Dictation must continue to work when no LLM, TTS endpoint, key, or assistant configuration exists.
-- Runtime code under `linux/dictate_unlimited/` uses the Python standard library only. NumPy and constriction are allowed only for the one-time Bark conversion.
+- Runtime code under `linux/ASR/` uses the Python standard library only. NumPy and constriction are allowed only for the one-time Bark conversion.
 - Never write API keys into `config.json`. Use `secrets.py` and `secrets.json` with mode `0600`; never print or log key values.
 - No webview or Tauri UI. Integration is Hyprland hotkeys, Waybar, and short desktop notifications.
 - Keep model revisions, sizes, and hashes pinned. Do not silently replace a model, precision, or backend.
+- The installed runtime is self-contained under `${XDG_DATA_HOME:-~/.local/share}/speech-flow/app`; `~/.local/bin/dictate` and the Waybar helper are symlinks into it. Never make the installed daemon depend on a checkout path.
 - Preserve third-party notices and Bark attribution. No model weights are redistributed.
 - Keep `README.md`, `linux/README.md`, `linux/TESTING.md`, `CHANGELOG.md`, and `linux/hyprland.conf.example` consistent with behavior when a change affects them.
 
@@ -118,7 +119,7 @@ This checkout contains the Linux port and its build/conversion scripts. The hist
 Run from the repository root:
 
 ```sh
-python3 -m py_compile linux/dictate_unlimited/*.py linux/waybar/dictate-assistant-waybar
+python3 -m py_compile linux/ASR/*.py linux/waybar/dictate-assistant-waybar
 PYTHONPATH=linux python3 -m unittest discover -s linux/tests
 ./linux/dictate doctor
 ./linux/dictate assistant doctor   # when assistant, LLM, or TTS changed
@@ -129,6 +130,6 @@ PYTHONPATH=linux python3 -m unittest discover -s linux/tests
 | Domain | Path | Scope |
 |---|---|---|
 | Linux port | `linux/AGENTS.md` | Packaging, install, Hyprland/Waybar/systemd integration, Linux user docs |
-| Python runtime | `linux/dictate_unlimited/AGENTS.md` | Daemon, CLI, ASR, insertion, config, assistant, LLM/TTS clients |
+| Python runtime | `linux/ASR/AGENTS.md` | Daemon, CLI, ASR, insertion, config, assistant, LLM/TTS clients |
 | Unit tests | `linux/tests/AGENTS.md` | Standard-library unittest suite and fakes |
 | Build and conversion | `scripts/AGENTS.md` | CPU-only ASR build and Bark-to-GGML conversion |
